@@ -1,0 +1,1 @@
+// Placeholder for database gateway helpers (auth, content, etc.).

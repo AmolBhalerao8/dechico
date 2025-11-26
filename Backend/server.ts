@@ -17,6 +17,9 @@ import * as SignupController from './auth/signupController';
 import * as LoginController from './auth/loginController';
 import { EmailVerification } from './auth/emailVerification';
 import { GlobalChatService } from './chat/globalChatService';
+import { SwipeService } from './dating/swipeService';
+import { MatchService } from './dating/matchService';
+import { ProfileService } from './dating/profileService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -179,6 +182,87 @@ app.get('/api/chat/messages', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error getting chat messages:', error);
     res.status(500).json({ error: error.message || 'Failed to get messages' });
+  }
+});
+
+// Dating endpoints
+app.get('/api/dating/profiles', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const profiles = await ProfileService.getSwipeableProfiles(userId);
+    res.json({ profiles });
+  } catch (error: any) {
+    console.error('Error getting profiles:', error);
+    res.status(500).json({ error: error.message || 'Failed to get profiles' });
+  }
+});
+
+app.post('/api/dating/swipe', async (req: Request, res: Response) => {
+  try {
+    const { swiperId, swiperEmail, swipedId, swipedEmail, direction } = req.body;
+    
+    if (!swiperId || !swiperEmail || !swipedId || !swipedEmail || !direction) {
+      return res.status(400).json({ error: 'All fields are required' });
+    }
+
+    if (direction !== 'left' && direction !== 'right') {
+      return res.status(400).json({ error: 'Direction must be left or right' });
+    }
+
+    const result = await SwipeService.recordSwipe(
+      swiperId,
+      swiperEmail,
+      swipedId,
+      swipedEmail,
+      direction
+    );
+
+    if (!result.success) {
+      return res.status(400).json({ error: result.message });
+    }
+
+    // If it's a match, create the match record
+    if (result.isMatch) {
+      const matchResult = await MatchService.createMatch(
+        swiperId,
+        swiperEmail,
+        swipedId,
+        swipedEmail
+      );
+
+      return res.json({
+        success: true,
+        message: 'It\'s a match!',
+        isMatch: true,
+        matchId: matchResult.matchId,
+      });
+    }
+
+    res.json(result);
+  } catch (error: any) {
+    console.error('Error recording swipe:', error);
+    res.status(500).json({ error: error.message || 'Failed to record swipe' });
+  }
+});
+
+app.get('/api/dating/matches', async (req: Request, res: Response) => {
+  try {
+    const { userId } = req.query;
+    
+    if (!userId || typeof userId !== 'string') {
+      return res.status(400).json({ error: 'User ID is required' });
+    }
+
+    const matches = await MatchService.getUserMatches(userId);
+    res.json({ matches });
+  } catch (error: any) {
+    console.error('Error getting matches:', error);
+    res.status(500).json({ error: error.message || 'Failed to get matches' });
   }
 });
 

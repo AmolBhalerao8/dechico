@@ -198,9 +198,19 @@ export const loginUser = async (
     const auth = getFirebaseAuth();
     const userCredential = await signInWithEmailAndPassword(auth, email, password);
 
-    // Update last login
+    // Check if user profile exists in Firestore
     const db = getFirebaseDb();
     const userRef = doc(db, USERS_COLLECTION, userCredential.user.uid);
+    const userDoc = await getDoc(userRef);
+
+    if (!userDoc.exists()) {
+      // Profile was deleted but auth account still exists
+      // Sign out and throw error
+      await signOut(auth);
+      throw new Error('Your account has been deleted. Please sign up for your fun dating journey! 🎉');
+    }
+
+    // Update last login
     await setDoc(
       userRef,
       {
@@ -212,7 +222,7 @@ export const loginUser = async (
     return userCredential;
   } catch (error: any) {
     if (error.code === 'auth/user-not-found') {
-      throw new Error('No account found with this email. Please sign up first.');
+      throw new Error('No account found with this email. Please sign up for your fun dating journey! 🎉');
     }
     if (error.code === 'auth/wrong-password') {
       throw new Error('Incorrect password. Please try again.');

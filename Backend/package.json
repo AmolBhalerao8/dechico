@@ -6,7 +6,9 @@
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1",
     "dev": "ts-node server.ts",
-    "start": "node server.js"
+    "start": "node server.js",
+    "add-test-profiles": "ts-node scripts/addTestProfiles.ts",
+    "delete-test-profiles": "ts-node scripts/deleteTestProfiles.ts"
   },
   "keywords": [],
   "author": "",

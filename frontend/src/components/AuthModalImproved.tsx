@@ -18,7 +18,7 @@ type AuthMode = 'login' | 'signup' | null;
 type AuthModalProps = {
   mode: AuthMode;
   onClose: () => void;
-  onSuccess: () => void;
+  onSuccess: (isNewUser?: boolean) => void;
 };
 
 type DeChicoWordmarkProps = {
@@ -47,6 +47,9 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
 
   if (!mode) return null;
   const isSignup = mode === 'signup';
+  
+  // Debug: Log current signup step
+  console.log('🔄 Current signup step:', signupStep, '| Mode:', mode);
 
   const handleSendCode = async () => {
     if (!email.trim()) {
@@ -100,6 +103,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
     setError('');
 
     try {
+      console.log('🔍 Verifying code for email:', email);
       const response = await fetch(`${API_URL}/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
@@ -112,10 +116,13 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
         throw new Error(data.error || 'Invalid verification code');
       }
 
+      console.log('✅ Code verified! Moving to password step...');
       setCodeVerified(true);
       setSignupStep('password');
+      console.log('📍 Signup step set to: password');
       setError('');
     } catch (err: any) {
+      console.error('❌ Verification error:', err);
       setError(err.message || 'Verification failed');
     } finally {
       setIsLoading(false);
@@ -138,7 +145,8 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
       const auth = getFirebaseAuth();
       await createUserWithEmailAndPassword(auth, email, password);
 
-      onSuccess();
+      // Call onSuccess with true to indicate this is a new user (signup)
+      onSuccess(true);
     } catch (err: any) {
       if (err.code === 'auth/email-already-in-use') {
         setError('An account with this email already exists. Please login instead.');
@@ -158,14 +166,15 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
       return;
     }
 
-    setIsLoading(false);
+    setIsLoading(true);
     setError('');
 
     try {
       const auth = getFirebaseAuth();
       await signInWithEmailAndPassword(auth, email, password);
 
-      onSuccess();
+      // Call onSuccess with false to indicate this is login (not signup)
+      onSuccess(false);
     } catch (err: any) {
       if (err.code === 'auth/user-not-found') {
         setError('No account found with this email. Please sign up first.');
@@ -219,6 +228,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
                   <input
                     type="text"
                     required
+                    autoComplete="name"
                     className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
                     placeholder="Sterling Jinwoo"
                     value={name}
@@ -233,6 +243,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
                   <input
                     type="email"
                     required
+                    autoComplete="email"
                     className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
                     placeholder="you@csuchico.edu"
                     value={email}
@@ -313,12 +324,17 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
                     type="password"
                     required
                     minLength={6}
+                    autoComplete="new-password"
                     className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-                    placeholder="••••••••"
+                    placeholder="Create a password (min 6 characters)"
                     value={password}
                     onChange={(e) => setPassword(e.target.value)}
                   />
-                  <p className="text-xs text-dchico-muted mt-1">At least 6 characters</p>
+                  <p className="text-xs text-dchico-muted mt-1">
+                    {password.length > 0 && password.length < 6 
+                      ? `${6 - password.length} more characters needed` 
+                      : 'At least 6 characters'}
+                  </p>
                 </div>
 
                 <button
@@ -341,6 +357,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
               <input
                 type="email"
                 required
+                autoComplete="email"
                 className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
                 placeholder="you@csuchico.edu"
                 value={email}
@@ -354,6 +371,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
                 type="password"
                 required
                 minLength={6}
+                autoComplete="current-password"
                 className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
                 placeholder="••••••••"
                 value={password}

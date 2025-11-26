@@ -1,5 +1,9 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
+import { useAuth } from './hooks/useAuth'
+import { AuthModal } from './components/AuthModal'
+import { saveProfile, updateUserProfile } from './services/userService'
+import { logoutUser } from './services/authService'
 
 type Tab = 'dating' | 'leaderboard' | 'chat' | 'profile'
 type AuthMode = 'login' | 'signup' | null
@@ -76,7 +80,9 @@ const DeChicoWordmark = ({ className = '' }: WordmarkProps) => (
 )
 
 const App = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  // Authentication state from Firebase
+  const { user, profile: firebaseProfile, loading, isLoggedIn } = useAuth()
+  
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [isOnboarding, setIsOnboarding] = useState(false)
   const [showCongrats, setShowCongrats] = useState(false)
@@ -101,8 +107,29 @@ const App = () => {
     return profile.galleryUrls.length > 0
   }, [profile.galleryUrls])
 
-  const handleFakeAuth = () => {
-    setIsLoggedIn(true)
+  // Load user profile from Firebase when logged in
+  useEffect(() => {
+    if (firebaseProfile) {
+      setProfile({
+        firstName: firebaseProfile.firstName || '',
+        lastName: firebaseProfile.lastName || '',
+        alias: firebaseProfile.alias || '',
+        bio: firebaseProfile.bio || '',
+        age: firebaseProfile.age || '',
+        ethnicity: firebaseProfile.ethnicity || '',
+        interests: firebaseProfile.interests || '',
+        avatarUrl: firebaseProfile.avatarUrl,
+        galleryUrls: firebaseProfile.photos || [],
+      })
+      
+      // Show onboarding if profile not complete
+      if (!firebaseProfile.profileComplete) {
+        setIsOnboarding(true)
+      }
+    }
+  }, [firebaseProfile])
+
+  const handleAuthSuccess = () => {
     setAuthMode(null)
     setIsOnboarding(true)
   }
@@ -141,15 +168,36 @@ const App = () => {
     })
   }
 
-  const handleOnboardingSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleOnboardingSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!profileComplete) {
       alert('Add at least one photo to continue.')
       return
     }
-    setIsOnboarding(false)
-    setShowCongrats(true)
-    setPendingProfileArrow(true)
+    
+    // Save profile to Firebase
+    if (user) {
+      try {
+        await saveProfile(user.uid, {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          alias: profile.alias,
+          bio: profile.bio,
+          age: profile.age,
+          ethnicity: profile.ethnicity,
+          interests: profile.interests,
+          photos: profile.galleryUrls,
+          avatarUrl: profile.avatarUrl,
+        } as any)
+        
+        setIsOnboarding(false)
+        setShowCongrats(true)
+        setPendingProfileArrow(true)
+      } catch (error) {
+        console.error('Error saving profile:', error)
+        alert('Failed to save profile. Please try again.')
+      }
+    }
   }
 
   const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
@@ -194,6 +242,15 @@ const App = () => {
     }
   }
 
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dchico-bg flex items-center justify-center">
+        <div className="text-dchico-accent text-lg">Loading...</div>
+      </div>
+    )
+  }
+
   if (!isLoggedIn) {
     return (
       <>
@@ -201,7 +258,7 @@ const App = () => {
         <AuthModal
           mode={authMode}
           onClose={() => setAuthMode(null)}
-          onSubmit={handleFakeAuth}
+          onSuccess={handleAuthSuccess}
         />
       </>
     )
@@ -234,8 +291,13 @@ const App = () => {
               displayName={displayName}
             />
           )}
-          {currentTab === 'profile' && (
-            <ProfileView profile={profile} setProfile={setProfile} handleAvatarUpload={handleAvatarUpload} />
+          {currentTab === 'profile' && user && (
+            <ProfileView 
+              profile={profile} 
+              setProfile={setProfile} 
+              handleAvatarUpload={handleAvatarUpload}
+              userId={user.uid}
+            />
           )}
         </main>
       </div>
@@ -293,173 +355,6 @@ const LandingPage = ({ onShowAuth }: LandingPageProps) => {
           aria-label="Chico State themed walkthrough preview video"
         />
       </main>
-    </div>
-  )
-}
-
-type AuthModalProps = {
-  mode: AuthMode
-  onClose: () => void
-  onSubmit: () => void
-}
-
-const AuthModal = ({ mode, onClose, onSubmit }: AuthModalProps) => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [verificationCodeInput, setVerificationCodeInput] = useState('')
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
-  const [codeStatus, setCodeStatus] = useState('')
-  const [isSendingCode, setIsSendingCode] = useState(false)
-
-  if (!mode) return null
-  const isSignup = mode === 'signup'
-
-  const handleSendCode = () => {
-    if (!email.trim()) {
-      alert('Enter your Chico State email first.')
-      return
-    }
-    setIsSendingCode(true)
-    setTimeout(() => {
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      setGeneratedCode(code)
-      setCodeStatus(`Code sent to ${email}. (Demo code: ${code})`)
-      setIsSendingCode(false)
-    }, 600)
-  }
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 backdrop-blur">
-      <div className="w-full max-w-md rounded-3xl bg-white border border-dchico-border p-6 shadow-2xl text-dchico-text">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {isSignup ? (
-                <>
-                  Join <DeChicoWordmark className="text-lg" />
-                </>
-              ) : (
-                'Welcome back'
-              )}
-            </h2>
-            <p className="text-xs text-dchico-muted mt-1">
-              Use your <span className="font-mono">@csuchico.edu</span> email. Exclusive Chico State only.
-            </p>
-          </div>
-          <button onClick={onClose} className="text-xl text-dchico-muted hover:text-dchico-accent">
-            ×
-          </button>
-        </div>
-        <form
-          className="space-y-3 text-sm"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (isSignup) {
-              if (!generatedCode) {
-                alert('Send the verification code to your email first.')
-                return
-              }
-              if (verificationCodeInput.trim() !== generatedCode) {
-                alert('Verification code is incorrect.')
-                return
-              }
-            }
-            onSubmit()
-            setEmail('')
-            setPassword('')
-            setName('')
-            setVerificationCodeInput('')
-            setGeneratedCode(null)
-            setCodeStatus('')
-          }}
-        >
-          {isSignup && (
-            <div>
-              <label className="text-xs text-dchico-muted block mb-1">Name</label>
-              <input
-                className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-                placeholder="Sterling Jinwoo"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-dchico-muted block mb-1">
-              Chico State email (@csuchico.edu)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                required
-                className="flex-1 rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-                placeholder="you@csuchico.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              {isSignup && (
-                <button
-                  type="button"
-                  onClick={handleSendCode}
-                  className="rounded-xl border border-dchico-border px-3 py-2 text-xs font-semibold hover:border-dchico-accent transition disabled:opacity-50"
-                  disabled={isSendingCode}
-                >
-                  {generatedCode ? 'Resend code' : 'Send code'}
-                </button>
-              )}
-            </div>
-            {isSignup && (
-              <p className="text-[11px] text-dchico-muted mt-1">
-                {codeStatus || 'We’ll email you a 6-digit code to verify you’re a Wildcat.'}
-              </p>
-            )}
-          </div>
-          {isSignup && (
-            <div>
-              <label className="text-xs text-dchico-muted block mb-1">Verification code</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60 tracking-[0.3em] text-center"
-                placeholder="123456"
-                value={verificationCodeInput}
-                onChange={(e) => setVerificationCodeInput(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-dchico-muted block mb-1">Password</label>
-            <input
-              type="password"
-              required
-              className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full mt-2 rounded-xl bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
-          >
-            {isSignup ? 'Create account' : 'Log in'}
-          </button>
-        </form>
-        <p className="mt-3 text-[11px] text-dchico-muted">
-          By continuing you confirm you’re a current Chico State student and agree to the{' '}
-          <a
-            href="/tersofuse.txt"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-dchico-accent underline hover:text-dchico-accent-secondary"
-          >
-            Terms of Use
-          </a>
-          .
-        </p>
-      </div>
     </div>
   )
 }
@@ -758,12 +653,14 @@ type ProfileViewProps = {
   profile: UserProfile
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   handleAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void
+  userId: string
 }
 
 const ProfileView = ({
   profile,
   setProfile,
   handleAvatarUpload,
+  userId,
 }: ProfileViewProps) => (
   <section className="p-4 lg:p-8">
     <div className="max-w-2xl space-y-5">
@@ -850,7 +747,30 @@ const ProfileView = ({
         </div>
       </div>
 
-      <button className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition">
+      <button 
+        onClick={async () => {
+          if (userId) {
+            try {
+              await updateUserProfile(userId, {
+                firstName: profile.firstName,
+                lastName: profile.lastName,
+                alias: profile.alias,
+                bio: profile.bio,
+                age: profile.age,
+                ethnicity: profile.ethnicity,
+                interests: profile.interests,
+                photos: profile.galleryUrls,
+                avatarUrl: profile.avatarUrl,
+              } as any)
+              alert('Profile saved successfully!')
+            } catch (error) {
+              console.error('Error saving profile:', error)
+              alert('Failed to save profile. Please try again.')
+            }
+          }
+        }}
+        className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
+      >
         Save changes
       </button>
     </div>

@@ -1,0 +1,15 @@
+rules_version = '2';
+
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow read/write access to email_verifications collection in test mode
+    match /email_verifications/{document=**} {
+      allow read, write: if true;
+    }
+    
+    // Default deny for other collections
+    match /{document=**} {
+      allow read, write: if false;
+    }
+  }
+}

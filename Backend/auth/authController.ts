@@ -3,7 +3,7 @@
  * Main entry point for authentication - determines if user should signup or login
  */
 
-import { UserService } from "./userService";
+import { UserService } from "../user/userService";
 import { EmailVerification } from "./emailVerification";
 
 export interface AuthCheckResult {

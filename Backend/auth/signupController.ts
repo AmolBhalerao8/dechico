@@ -4,7 +4,7 @@
  */
 
 import { EmailVerification } from "./emailVerification";
-import { UserService } from "./userService";
+import { UserService } from "../user/userService";
 import type { UserCredential } from "firebase/auth";
 
 export interface SignupStep1Result {

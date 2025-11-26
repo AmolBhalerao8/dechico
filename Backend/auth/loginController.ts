@@ -3,8 +3,8 @@
  * Handles existing user login flow
  */
 
-import { DatabaseGateway } from "./Database/databaseGateway";
-import { UserService } from "./userService";
+import { DatabaseGateway } from "../Database/databaseGateway";
+import { UserService } from "../user/userService";
 import type { UserCredential } from "firebase/auth";
 
 export interface LoginResult {

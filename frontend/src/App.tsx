@@ -4,15 +4,19 @@ import { useAuth } from './hooks/useAuth'
 import { AuthModal } from './components/AuthModalImproved'
 import { saveProfile, updateUserProfile } from './services/userService'
 import { logoutUser } from './services/authService'
+import { subscribeToGlobalChat, sendGlobalMessage, formatTimestamp } from './services/chatService'
 
 type Tab = 'dating' | 'leaderboard' | 'chat' | 'profile'
 type AuthMode = 'login' | 'signup' | null
 
 type ChatMessage = {
-  id: number
-  author: string
-  text: string
-  time: string
+  id: string
+  userId: string
+  email: string
+  alias: string
+  message: string
+  timestamp: any
+  createdAt: string
 }
 
 type UserProfile = {
@@ -38,27 +42,6 @@ const initialProfile: UserProfile = {
   avatarUrl: undefined,
   galleryUrls: [],
 }
-
-const seedMessages: ChatMessage[] = [
-  {
-    id: 1,
-    author: 'wildcat_01',
-    text: 'Anyone else surviving on Costco samples this week?',
-    time: '7:32 pm',
-  },
-  {
-    id: 2,
-    author: 'csu_ghost',
-    text: 'Global chat feels safer than running into your ex at the BMU 💀',
-    time: '7:35 pm',
-  },
-  {
-    id: 3,
-    author: 'parkour_prof',
-    text: 'Need a duo for midnight library sprint + Jack’s karaoke after?',
-    time: '7:48 pm',
-  },
-]
 
 const leaderboardItems = [
   '2am Jack’s karaoke with people you barely know',
@@ -88,7 +71,7 @@ const App = () => {
   const [showCongrats, setShowCongrats] = useState(false)
   const [currentTab, setCurrentTab] = useState<Tab>('dating')
   const [profile, setProfile] = useState<UserProfile>(initialProfile)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(seedMessages)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [leaderboardVotes, setLeaderboardVotes] = useState(
     leaderboardItems.map(() => Math.floor(Math.random() * 5) + 1),
@@ -200,22 +183,29 @@ const App = () => {
     }
   }
 
-  const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
+  const handleSendChat = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!chatInput.trim()) return
-    const now = new Date()
-    const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        author: displayName,
-        text: chatInput.trim(),
-        time,
-      },
-    ])
-    setChatInput('')
+    if (!chatInput.trim() || !user) return
+    
+    try {
+      await sendGlobalMessage(user.uid, user.email || '', displayName, chatInput.trim())
+      setChatInput('')
+    } catch (error) {
+      console.error('Error sending message:', error)
+      alert('Failed to send message. Please try again.')
+    }
   }
+
+  // Subscribe to real-time chat messages
+  useEffect(() => {
+    if (!isLoggedIn) return
+
+    const unsubscribe = subscribeToGlobalChat((messages) => {
+      setChatMessages(messages)
+    })
+
+    return () => unsubscribe()
+  }, [isLoggedIn])
 
   const handleVote = (index: number) => {
     setLeaderboardVotes((prev) =>
@@ -630,7 +620,7 @@ const ChatView = ({
   <section className="flex flex-col h-[calc(100vh-64px)] lg:h-[calc(100vh-64px)]">
     <div className="flex-1 overflow-y-auto p-4 space-y-2">
       {chatMessages.map((message) => {
-        const isMe = message.author === displayName
+        const isMe = message.alias === displayName
         return (
           <div key={message.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -645,10 +635,10 @@ const ChatView = ({
                   isMe ? 'text-white/80' : 'text-dchico-accent-secondary'
                 }`}
               >
-                {isMe ? 'you' : message.author}
+                {isMe ? 'you' : message.alias}
               </div>
-              <p>{message.text}</p>
-              <div className="text-[10px] text-dchico-muted mt-1 text-right">{message.time}</div>
+              <p>{message.message}</p>
+              <div className="text-[10px] text-dchico-muted mt-1 text-right">{formatTimestamp(message.timestamp)}</div>
             </div>
           </div>
         )

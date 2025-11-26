@@ -16,6 +16,7 @@ import * as AuthController from './auth/authController';
 import * as SignupController from './auth/signupController';
 import * as LoginController from './auth/loginController';
 import { EmailVerification } from './auth/emailVerification';
+import { GlobalChatService } from './chat/globalChatService';
 
 const app = express();
 const PORT = process.env.PORT || 3001;
@@ -141,6 +142,43 @@ app.post('/api/auth/login', async (req: Request, res: Response) => {
   } catch (error: any) {
     console.error('Error logging in:', error);
     res.status(500).json({ error: error.message || 'Login failed' });
+  }
+});
+
+// Chat endpoints
+app.post('/api/chat/send', async (req: Request, res: Response) => {
+  try {
+    const { userId, email, alias, message } = req.body;
+    
+    if (!userId || !email || !alias || !message) {
+      return res.status(400).json({ error: 'User ID, email, alias, and message are required' });
+    }
+
+    const result = await GlobalChatService.sendGlobalMessage(userId, email, alias, message);
+    
+    if (result.success) {
+      res.json(result);
+    } else {
+      res.status(400).json({ error: result.message });
+    }
+  } catch (error: any) {
+    console.error('Error sending chat message:', error);
+    res.status(500).json({ error: error.message || 'Failed to send message' });
+  }
+});
+
+app.get('/api/chat/messages', async (req: Request, res: Response) => {
+  try {
+    const result = await GlobalChatService.getRecentMessages();
+    
+    if (result.success) {
+      res.json({ messages: result.messages });
+    } else {
+      res.status(500).json({ error: result.error || 'Failed to get messages' });
+    }
+  } catch (error: any) {
+    console.error('Error getting chat messages:', error);
+    res.status(500).json({ error: error.message || 'Failed to get messages' });
   }
 });
 

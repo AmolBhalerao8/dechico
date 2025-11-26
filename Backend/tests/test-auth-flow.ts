@@ -4,11 +4,12 @@
  */
 
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+dotenv.config({ path: path.join(__dirname, '..', 'config', '.env') });
 
-import { AuthController } from './authController';
-import { SignupController } from './signupController';
-import { LoginController } from './loginController';
+import { AuthController } from '../auth/authController';
+import { SignupController } from '../auth/signupController';
+import { LoginController } from '../auth/loginController';
 
 async function testAuthFlow() {
   console.log('=== DeChico Authentication Flow Test ===\n');

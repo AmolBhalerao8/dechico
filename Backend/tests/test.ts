@@ -1,7 +1,8 @@
 import dotenv from 'dotenv';
-dotenv.config();
+import path from 'path';
+dotenv.config({ path: path.join(__dirname, '..', 'config', '.env') });
 
-import { EmailVerification } from './emailVerification';
+import { EmailVerification } from '../auth/emailVerification';
 
 async function test() {
   try {

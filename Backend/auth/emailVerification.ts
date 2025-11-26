@@ -19,7 +19,7 @@ import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
 import { google } from "googleapis";
 
 // Import Firebase config from Database folder
-import { firebaseConfig } from "./Database/firebaseConfig";
+import { firebaseConfig } from "../Database/firebaseConfig";
 
 // Constants
 const CSU_CHICO_DOMAIN = "@csuchico.edu";

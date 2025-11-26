@@ -17,7 +17,7 @@ import {
 } from "firebase/firestore";
 import { getAuth, type User } from "firebase/auth";
 import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { firebaseConfig } from "./Database/firebaseConfig";
+import { firebaseConfig } from "../Database/firebaseConfig";
 
 const USERS_COLLECTION = "users";
 

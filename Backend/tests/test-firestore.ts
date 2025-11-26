@@ -1,6 +1,6 @@
 import { initializeApp } from "firebase/app";
 import { getFirestore, collection, addDoc } from "firebase/firestore";
-import { firebaseConfig } from "./Database/firebaseConfig";
+import { firebaseConfig } from "../Database/firebaseConfig";
 
 async function testFirestore() {
   try {

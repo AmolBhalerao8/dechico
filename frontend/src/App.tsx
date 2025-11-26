@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
 import { useAuth } from './hooks/useAuth'
-import { AuthModal } from './components/AuthModal'
+import { AuthModal } from './components/AuthModalImproved'
 import { saveProfile, updateUserProfile } from './services/userService'
 import { logoutUser } from './services/authService'
 
@@ -242,6 +242,20 @@ const App = () => {
     }
   }
 
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to logout?')) {
+      try {
+        await logoutUser()
+        // Reset local state
+        setProfile(initialProfile)
+        setCurrentTab('dating')
+      } catch (error) {
+        console.error('Error logging out:', error)
+        alert('Failed to logout. Please try again.')
+      }
+    }
+  }
+
   // Show loading state
   if (loading) {
     return (
@@ -271,6 +285,7 @@ const App = () => {
         setCurrentTab={setCurrentTab}
         displayName={displayName}
         showProfileArrow={showProfileArrow}
+        onLogout={handleLogout}
       />
 
       <div className="flex-1 flex flex-col min-h-screen">
@@ -364,9 +379,10 @@ type SidebarProps = {
   setCurrentTab: (tab: Tab) => void
   displayName: string
   showProfileArrow: boolean
+  onLogout: () => void
 }
 
-const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow }: SidebarProps) => (
+const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow, onLogout }: SidebarProps) => (
   <aside className="hidden lg:flex flex-col w-64 border-r border-dchico-border bg-white/80 backdrop-blur">
     <div className="px-5 py-5 border-b border-dchico-border flex items-center">
       <DeChicoWordmark className="text-lg" />
@@ -405,12 +421,21 @@ const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow }: S
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{displayName}</p>
-        <button
-          className="text-[12px] text-dchico-muted hover:text-dchico-accent"
-          onClick={() => setCurrentTab('profile')}
-        >
-          View profile
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="text-[12px] text-dchico-muted hover:text-dchico-accent"
+            onClick={() => setCurrentTab('profile')}
+          >
+            View profile
+          </button>
+          <span className="text-[12px] text-dchico-muted">•</span>
+          <button
+            className="text-[12px] text-dchico-muted hover:text-red-600"
+            onClick={onLogout}
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </div>
   </aside>

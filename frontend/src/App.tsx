@@ -1,14 +1,25 @@
 import { useEffect, useMemo, useState } from 'react'
 import type { ChangeEvent, FormEvent } from 'react'
+import { useAuth } from './hooks/useAuth'
+import { AuthModal } from './components/AuthModalImproved'
+import { saveProfile, updateUserProfile, deleteUserProfile } from './services/userService'
+import { logoutUser } from './services/authService'
+import { subscribeToGlobalChat, sendGlobalMessage, formatTimestamp } from './services/chatService'
+import { getSwipeableProfiles, recordSwipe, type DatingProfile } from './services/datingService'
+import { SwipeCard } from './components/SwipeCard'
+import { MatchModal } from './components/MatchModal'
 
 type Tab = 'dating' | 'leaderboard' | 'chat' | 'profile'
 type AuthMode = 'login' | 'signup' | null
 
 type ChatMessage = {
-  id: number
-  author: string
-  text: string
-  time: string
+  id: string
+  userId: string
+  email: string
+  alias: string
+  message: string
+  timestamp: any
+  createdAt: string
 }
 
 type UserProfile = {
@@ -19,6 +30,8 @@ type UserProfile = {
   age: string
   ethnicity: string
   interests: string
+  gender: string
+  genderPreference: string // Who they want to see: 'Male', 'Female', 'Both'
   avatarUrl?: string
   galleryUrls: string[]
 }
@@ -31,30 +44,11 @@ const initialProfile: UserProfile = {
   age: '',
   ethnicity: '',
   interests: '',
+  gender: '',
+  genderPreference: 'Both',
   avatarUrl: undefined,
   galleryUrls: [],
 }
-
-const seedMessages: ChatMessage[] = [
-  {
-    id: 1,
-    author: 'wildcat_01',
-    text: 'Anyone else surviving on Costco samples this week?',
-    time: '7:32 pm',
-  },
-  {
-    id: 2,
-    author: 'csu_ghost',
-    text: 'Global chat feels safer than running into your ex at the BMU 💀',
-    time: '7:35 pm',
-  },
-  {
-    id: 3,
-    author: 'parkour_prof',
-    text: 'Need a duo for midnight library sprint + Jack’s karaoke after?',
-    time: '7:48 pm',
-  },
-]
 
 const leaderboardItems = [
   '2am Jack’s karaoke with people you barely know',
@@ -76,19 +70,29 @@ const DeChicoWordmark = ({ className = '' }: WordmarkProps) => (
 )
 
 const App = () => {
-  const [isLoggedIn, setIsLoggedIn] = useState(false)
+  // Authentication state from Firebase
+  const { user, profile: firebaseProfile, loading, isLoggedIn } = useAuth()
+  
   const [authMode, setAuthMode] = useState<AuthMode>(null)
   const [isOnboarding, setIsOnboarding] = useState(false)
   const [showCongrats, setShowCongrats] = useState(false)
   const [currentTab, setCurrentTab] = useState<Tab>('dating')
   const [profile, setProfile] = useState<UserProfile>(initialProfile)
-  const [chatMessages, setChatMessages] = useState<ChatMessage[]>(seedMessages)
+  const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
   const [leaderboardVotes, setLeaderboardVotes] = useState(
     leaderboardItems.map(() => Math.floor(Math.random() * 5) + 1),
   )
   const [showProfileArrow, setShowProfileArrow] = useState(false)
   const [pendingProfileArrow, setPendingProfileArrow] = useState(false)
+  
+  // Dating state
+  const [datingProfiles, setDatingProfiles] = useState<DatingProfile[]>([])
+  const [currentProfileIndex, setCurrentProfileIndex] = useState(0)
+  const [isSwipeLoading, setIsSwipeLoading] = useState(false)
+  const [showMatchModal, setShowMatchModal] = useState(false)
+  const [matchedProfile, setMatchedProfile] = useState<DatingProfile | null>(null)
+  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false)
 
   const displayName = useMemo(() => {
     const fallback =
@@ -98,24 +102,82 @@ const App = () => {
   }, [profile])
 
   const profileComplete = useMemo(() => {
-    return profile.galleryUrls.length > 0
-  }, [profile.galleryUrls])
+    return (
+      profile.galleryUrls.length > 0 &&
+      !!(profile.firstName || profile.alias) &&
+      !!profile.age &&
+      !!profile.gender
+    )
+  }, [profile.galleryUrls, profile.firstName, profile.alias, profile.age, profile.gender])
 
-  const handleFakeAuth = () => {
-    setIsLoggedIn(true)
+  // Load user profile from Firebase when logged in
+  useEffect(() => {
+    if (firebaseProfile) {
+      setProfile({
+        firstName: firebaseProfile.firstName || '',
+        lastName: firebaseProfile.lastName || '',
+        alias: firebaseProfile.alias || '',
+        bio: firebaseProfile.bio || '',
+        age: firebaseProfile.age || '',
+        ethnicity: firebaseProfile.ethnicity || '',
+        interests: firebaseProfile.interests || '',
+        gender: (firebaseProfile as any).gender || '',
+        genderPreference: (firebaseProfile as any).genderPreference || 'Both',
+        avatarUrl: firebaseProfile.avatarUrl,
+        galleryUrls: firebaseProfile.photos || [],
+      })
+      
+      // Don't show onboarding modal on login - user can complete profile from Profile tab
+      // Onboarding only shows after signup (via handleAuthSuccess)
+    }
+  }, [firebaseProfile])
+
+  const handleAuthSuccess = (isNewUser: boolean = false) => {
     setAuthMode(null)
-    setIsOnboarding(true)
+    // Only show onboarding for new signups, not for login
+    if (isNewUser) {
+      setIsOnboarding(true)
+    }
   }
 
   const handleAvatarUpload = (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0]
     if (!file) return
+    
+    // Compress image before saving
     const reader = new FileReader()
-    reader.onload = () => {
-      setProfile((prev) => ({
-        ...prev,
-        avatarUrl: reader.result as string,
-      }))
+    reader.onload = (e) => {
+      const img = new Image()
+      img.onload = () => {
+        const canvas = document.createElement('canvas')
+        const ctx = canvas.getContext('2d')
+        
+        // Resize to max 800px width/height
+        let width = img.width
+        let height = img.height
+        const maxSize = 800
+        
+        if (width > height && width > maxSize) {
+          height = (height * maxSize) / width
+          width = maxSize
+        } else if (height > maxSize) {
+          width = (width * maxSize) / height
+          height = maxSize
+        }
+        
+        canvas.width = width
+        canvas.height = height
+        ctx?.drawImage(img, 0, 0, width, height)
+        
+        // Compress to JPEG with 0.7 quality
+        const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7)
+        
+        setProfile((prev) => ({
+          ...prev,
+          avatarUrl: compressedDataUrl,
+        }))
+      }
+      img.src = e.target?.result as string
     }
     reader.readAsDataURL(file)
   }
@@ -126,48 +188,102 @@ const App = () => {
 
     Array.from(files).forEach((file) => {
       const reader = new FileReader()
-      reader.onload = () => {
-        const imageData = reader.result as string
-        setProfile((prev) => {
-          const updatedGallery = [...prev.galleryUrls, imageData]
-          return {
-            ...prev,
-            galleryUrls: updatedGallery,
-            avatarUrl: prev.avatarUrl || updatedGallery[0],
+      reader.onload = (e) => {
+        const img = new Image()
+        img.onload = () => {
+          const canvas = document.createElement('canvas')
+          const ctx = canvas.getContext('2d')
+          
+          // Resize to max 800px width/height
+          let width = img.width
+          let height = img.height
+          const maxSize = 800
+          
+          if (width > height && width > maxSize) {
+            height = (height * maxSize) / width
+            width = maxSize
+          } else if (height > maxSize) {
+            width = (width * maxSize) / height
+            height = maxSize
           }
-        })
+          
+          canvas.width = width
+          canvas.height = height
+          ctx?.drawImage(img, 0, 0, width, height)
+          
+          // Compress to JPEG with 0.7 quality
+          const compressedDataUrl = canvas.toDataURL('image/jpeg', 0.7)
+          
+          setProfile((prev) => {
+            const updatedGallery = [...prev.galleryUrls, compressedDataUrl]
+            return {
+              ...prev,
+              galleryUrls: updatedGallery,
+              avatarUrl: prev.avatarUrl || updatedGallery[0],
+            }
+          })
+        }
+        img.src = e.target?.result as string
       }
       reader.readAsDataURL(file)
     })
   }
 
-  const handleOnboardingSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const handleOnboardingSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
     if (!profileComplete) {
       alert('Add at least one photo to continue.')
       return
     }
-    setIsOnboarding(false)
-    setShowCongrats(true)
-    setPendingProfileArrow(true)
+    
+    // Save profile to Firebase
+    if (user) {
+      try {
+        await saveProfile(user.uid, user.email || '', {
+          firstName: profile.firstName,
+          lastName: profile.lastName,
+          alias: profile.alias,
+          bio: profile.bio,
+          age: profile.age,
+          ethnicity: profile.ethnicity,
+          interests: profile.interests,
+          photos: profile.galleryUrls,
+          avatarUrl: profile.avatarUrl,
+        } as any)
+        
+        setIsOnboarding(false)
+        setShowCongrats(true)
+        setPendingProfileArrow(true)
+      } catch (error) {
+        console.error('Error saving profile:', error)
+        alert('Failed to save profile. Please try again.')
+      }
+    }
   }
 
-  const handleSendChat = (event: FormEvent<HTMLFormElement>) => {
+  const handleSendChat = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault()
-    if (!chatInput.trim()) return
-    const now = new Date()
-    const time = now.toLocaleTimeString([], { hour: 'numeric', minute: '2-digit' })
-    setChatMessages((prev) => [
-      ...prev,
-      {
-        id: Date.now(),
-        author: displayName,
-        text: chatInput.trim(),
-        time,
-      },
-    ])
-    setChatInput('')
+    if (!chatInput.trim() || !user) return
+    
+    try {
+      await sendGlobalMessage(user.uid, user.email || '', displayName, chatInput.trim())
+      setChatInput('')
+    } catch (error) {
+      console.error('Error sending message:', error)
+      alert('Failed to send message. Please try again.')
+    }
   }
+
+  // Subscribe to real-time chat messages
+  useEffect(() => {
+    if (!isLoggedIn) return
+
+    const unsubscribe = subscribeToGlobalChat((messages) => {
+      setChatMessages(messages)
+    })
+
+    return () => unsubscribe()
+  }, [isLoggedIn])
 
   const handleVote = (index: number) => {
     setLeaderboardVotes((prev) =>
@@ -179,7 +295,11 @@ const App = () => {
     if (currentTab === 'profile' && showProfileArrow) {
       setShowProfileArrow(false)
     }
-  }, [currentTab, showProfileArrow])
+    // Hide arrow if profile is complete
+    if (profileComplete && showProfileArrow) {
+      setShowProfileArrow(false)
+    }
+  }, [currentTab, showProfileArrow, profileComplete])
 
   const handleSkipOnboarding = () => {
     setIsOnboarding(false)
@@ -194,6 +314,106 @@ const App = () => {
     }
   }
 
+  const handleLogout = async () => {
+    if (confirm('Are you sure you want to logout?')) {
+      try {
+        await logoutUser()
+        // Reset local state
+        setProfile(initialProfile)
+        setCurrentTab('dating')
+      } catch (error) {
+        console.error('Error logging out:', error)
+        alert('Failed to logout. Please try again.')
+      }
+    }
+  }
+
+  // Load dating profiles
+  const loadDatingProfiles = async () => {
+    if (!user) {
+      console.log('No user, cannot load profiles')
+      return
+    }
+
+    console.log('Loading dating profiles for user:', user.uid)
+    setIsLoadingProfiles(true)
+    try {
+      const profiles = await getSwipeableProfiles(user.uid)
+      console.log('Loaded profiles:', profiles.length, profiles)
+      setDatingProfiles(profiles)
+      setCurrentProfileIndex(0)
+    } catch (error) {
+      console.error('Error loading profiles:', error)
+      // Don't show alert - just log the error
+      // User will see "You've seen everyone!" message instead
+      setDatingProfiles([])
+    } finally {
+      setIsLoadingProfiles(false)
+    }
+  }
+
+  // Handle swipe action
+  const handleSwipe = async (direction: 'left' | 'right') => {
+    if (!user || !datingProfiles[currentProfileIndex]) return
+
+    const swipedProfile = datingProfiles[currentProfileIndex]
+    setIsSwipeLoading(true)
+
+    try {
+      const result = await recordSwipe(
+        user.uid,
+        user.email || '',
+        swipedProfile.userId,
+        swipedProfile.email,
+        direction
+      )
+
+      if (result.isMatch) {
+        // Show match modal
+        setMatchedProfile(swipedProfile)
+        setShowMatchModal(true)
+      }
+
+      // Move to next profile
+      if (currentProfileIndex < datingProfiles.length - 1) {
+        setCurrentProfileIndex(currentProfileIndex + 1)
+      } else {
+        // Load more profiles
+        await loadDatingProfiles()
+      }
+    } catch (error) {
+      console.error('Error recording swipe:', error)
+      alert('Failed to record swipe. Please try again.')
+    } finally {
+      setIsSwipeLoading(false)
+    }
+  }
+
+  // Load profiles when user logs in and profile is complete
+  useEffect(() => {
+    console.log('Dating useEffect triggered:', { isLoggedIn, profileComplete, currentTab })
+    if (isLoggedIn && profileComplete && currentTab === 'dating') {
+      console.log('Conditions met, loading profiles...')
+      loadDatingProfiles()
+    } else {
+      console.log('Conditions not met:', {
+        isLoggedIn,
+        profileComplete,
+        currentTab,
+        reason: !isLoggedIn ? 'Not logged in' : !profileComplete ? 'Profile incomplete' : 'Not on dating tab'
+      })
+    }
+  }, [isLoggedIn, profileComplete, currentTab])
+
+  // Show loading state
+  if (loading) {
+    return (
+      <div className="min-h-screen bg-dchico-bg flex items-center justify-center">
+        <div className="text-dchico-accent text-lg">Loading...</div>
+      </div>
+    )
+  }
+
   if (!isLoggedIn) {
     return (
       <>
@@ -201,7 +421,7 @@ const App = () => {
         <AuthModal
           mode={authMode}
           onClose={() => setAuthMode(null)}
-          onSubmit={handleFakeAuth}
+          onSuccess={handleAuthSuccess}
         />
       </>
     )
@@ -214,13 +434,22 @@ const App = () => {
         setCurrentTab={setCurrentTab}
         displayName={displayName}
         showProfileArrow={showProfileArrow}
+        onLogout={handleLogout}
       />
 
       <div className="flex-1 flex flex-col min-h-screen">
         <TopBar currentTab={currentTab} displayName={displayName} />
         <main className="flex-1 overflow-y-auto">
           {currentTab === 'dating' && (
-            <DatingView profileComplete={profileComplete} onEdit={() => setCurrentTab('profile')} />
+            <DatingView 
+              profileComplete={profileComplete} 
+              onEdit={() => setCurrentTab('profile')}
+              profiles={datingProfiles}
+              currentProfileIndex={currentProfileIndex}
+              onSwipe={handleSwipe}
+              isLoading={isSwipeLoading}
+              isLoadingProfiles={isLoadingProfiles}
+            />
           )}
           {currentTab === 'leaderboard' && (
             <LeaderboardView votes={leaderboardVotes} onVote={handleVote} />
@@ -234,8 +463,15 @@ const App = () => {
               displayName={displayName}
             />
           )}
-          {currentTab === 'profile' && (
-            <ProfileView profile={profile} setProfile={setProfile} handleAvatarUpload={handleAvatarUpload} />
+          {currentTab === 'profile' && user && (
+            <ProfileView 
+              profile={profile} 
+              setProfile={setProfile} 
+              handleAvatarUpload={handleAvatarUpload}
+              userId={user.uid}
+              profileComplete={profileComplete}
+              setCurrentTab={setCurrentTab}
+            />
           )}
         </main>
       </div>
@@ -251,6 +487,15 @@ const App = () => {
         profileComplete={profileComplete}
       />
       <CongratsModal show={showCongrats} onContinue={handleCongratsContinue} />
+      <MatchModal 
+        show={showMatchModal}
+        matchedProfile={matchedProfile}
+        onClose={() => setShowMatchModal(false)}
+        onSendMessage={() => {
+          setShowMatchModal(false)
+          setCurrentTab('chat')
+        }}
+      />
       {showProfileArrow && <ProfilePointerOverlay />}
     </div>
   )
@@ -297,181 +542,15 @@ const LandingPage = ({ onShowAuth }: LandingPageProps) => {
   )
 }
 
-type AuthModalProps = {
-  mode: AuthMode
-  onClose: () => void
-  onSubmit: () => void
-}
-
-const AuthModal = ({ mode, onClose, onSubmit }: AuthModalProps) => {
-  const [email, setEmail] = useState('')
-  const [password, setPassword] = useState('')
-  const [name, setName] = useState('')
-  const [verificationCodeInput, setVerificationCodeInput] = useState('')
-  const [generatedCode, setGeneratedCode] = useState<string | null>(null)
-  const [codeStatus, setCodeStatus] = useState('')
-  const [isSendingCode, setIsSendingCode] = useState(false)
-
-  if (!mode) return null
-  const isSignup = mode === 'signup'
-
-  const handleSendCode = () => {
-    if (!email.trim()) {
-      alert('Enter your Chico State email first.')
-      return
-    }
-    setIsSendingCode(true)
-    setTimeout(() => {
-      const code = Math.floor(100000 + Math.random() * 900000).toString()
-      setGeneratedCode(code)
-      setCodeStatus(`Code sent to ${email}. (Demo code: ${code})`)
-      setIsSendingCode(false)
-    }, 600)
-  }
-
-  return (
-    <div className="fixed inset-0 z-30 flex items-center justify-center bg-black/50 backdrop-blur">
-      <div className="w-full max-w-md rounded-3xl bg-white border border-dchico-border p-6 shadow-2xl text-dchico-text">
-        <div className="flex justify-between items-start mb-4">
-          <div>
-            <h2 className="text-lg font-semibold">
-              {isSignup ? (
-                <>
-                  Join <DeChicoWordmark className="text-lg" />
-                </>
-              ) : (
-                'Welcome back'
-              )}
-            </h2>
-            <p className="text-xs text-dchico-muted mt-1">
-              Use your <span className="font-mono">@csuchico.edu</span> email. Exclusive Chico State only.
-            </p>
-          </div>
-          <button onClick={onClose} className="text-xl text-dchico-muted hover:text-dchico-accent">
-            ×
-          </button>
-        </div>
-        <form
-          className="space-y-3 text-sm"
-          onSubmit={(event) => {
-            event.preventDefault()
-            if (isSignup) {
-              if (!generatedCode) {
-                alert('Send the verification code to your email first.')
-                return
-              }
-              if (verificationCodeInput.trim() !== generatedCode) {
-                alert('Verification code is incorrect.')
-                return
-              }
-            }
-            onSubmit()
-            setEmail('')
-            setPassword('')
-            setName('')
-            setVerificationCodeInput('')
-            setGeneratedCode(null)
-            setCodeStatus('')
-          }}
-        >
-          {isSignup && (
-            <div>
-              <label className="text-xs text-dchico-muted block mb-1">Name</label>
-              <input
-                className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-                placeholder="Sterling Jinwoo"
-                value={name}
-                onChange={(e) => setName(e.target.value)}
-              />
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-dchico-muted block mb-1">
-              Chico State email (@csuchico.edu)
-            </label>
-            <div className="flex gap-2">
-              <input
-                type="email"
-                required
-                className="flex-1 rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-                placeholder="you@csuchico.edu"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
-              />
-              {isSignup && (
-                <button
-                  type="button"
-                  onClick={handleSendCode}
-                  className="rounded-xl border border-dchico-border px-3 py-2 text-xs font-semibold hover:border-dchico-accent transition disabled:opacity-50"
-                  disabled={isSendingCode}
-                >
-                  {generatedCode ? 'Resend code' : 'Send code'}
-                </button>
-              )}
-            </div>
-            {isSignup && (
-              <p className="text-[11px] text-dchico-muted mt-1">
-                {codeStatus || 'We’ll email you a 6-digit code to verify you’re a Wildcat.'}
-              </p>
-            )}
-          </div>
-          {isSignup && (
-            <div>
-              <label className="text-xs text-dchico-muted block mb-1">Verification code</label>
-              <input
-                type="text"
-                inputMode="numeric"
-                maxLength={6}
-                className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60 tracking-[0.3em] text-center"
-                placeholder="123456"
-                value={verificationCodeInput}
-                onChange={(e) => setVerificationCodeInput(e.target.value.replace(/\D/g, ''))}
-              />
-            </div>
-          )}
-          <div>
-            <label className="text-xs text-dchico-muted block mb-1">Password</label>
-            <input
-              type="password"
-              required
-              className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
-              placeholder="••••••••"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
-            />
-          </div>
-          <button
-            type="submit"
-            className="w-full mt-2 rounded-xl bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
-          >
-            {isSignup ? 'Create account' : 'Log in'}
-          </button>
-        </form>
-        <p className="mt-3 text-[11px] text-dchico-muted">
-          By continuing you confirm you’re a current Chico State student and agree to the{' '}
-          <a
-            href="/tersofuse.txt"
-            target="_blank"
-            rel="noopener noreferrer"
-            className="text-dchico-accent underline hover:text-dchico-accent-secondary"
-          >
-            Terms of Use
-          </a>
-          .
-        </p>
-      </div>
-    </div>
-  )
-}
-
 type SidebarProps = {
   currentTab: Tab
   setCurrentTab: (tab: Tab) => void
   displayName: string
   showProfileArrow: boolean
+  onLogout: () => void
 }
 
-const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow }: SidebarProps) => (
+const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow, onLogout }: SidebarProps) => (
   <aside className="hidden lg:flex flex-col w-64 border-r border-dchico-border bg-white/80 backdrop-blur">
     <div className="px-5 py-5 border-b border-dchico-border flex items-center">
       <DeChicoWordmark className="text-lg" />
@@ -510,12 +589,21 @@ const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow }: S
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{displayName}</p>
-        <button
-          className="text-[12px] text-dchico-muted hover:text-dchico-accent"
-          onClick={() => setCurrentTab('profile')}
-        >
-          View profile
-        </button>
+        <div className="flex gap-2">
+          <button
+            className="text-[12px] text-dchico-muted hover:text-dchico-accent"
+            onClick={() => setCurrentTab('profile')}
+          >
+            View profile
+          </button>
+          <span className="text-[12px] text-dchico-muted">•</span>
+          <button
+            className="text-[12px] text-dchico-muted hover:text-red-600"
+            onClick={onLogout}
+          >
+            Logout
+          </button>
+        </div>
       </div>
     </div>
   </aside>
@@ -607,16 +695,29 @@ const TopBar = ({ currentTab, displayName }: TopBarProps) => {
 type DatingViewProps = {
   profileComplete: boolean
   onEdit: () => void
+  profiles: DatingProfile[]
+  currentProfileIndex: number
+  onSwipe: (direction: 'left' | 'right') => void
+  isLoading: boolean
+  isLoadingProfiles: boolean
 }
 
-const DatingView = ({ profileComplete, onEdit }: DatingViewProps) => {
+const DatingView = ({ 
+  profileComplete, 
+  onEdit, 
+  profiles, 
+  currentProfileIndex, 
+  onSwipe, 
+  isLoading,
+  isLoadingProfiles 
+}: DatingViewProps) => {
   if (!profileComplete) {
     return (
       <section className="p-4 lg:p-8">
         <div className="max-w-xl rounded-2xl border border-amber-500/40 bg-[#fff3e5] p-5">
           <h2 className="text-sm font-semibold mb-1">Complete your profile to unlock dating</h2>
           <p className="text-xs text-[#8a5224] mb-3">
-            We need at least a picture, name (or alias), and age before we start any Chico State dating chaos.
+            Add a photo, name (or alias), age, gender, and who you want to see. Then start swiping!
           </p>
           <button
             onClick={onEdit}
@@ -629,30 +730,56 @@ const DatingView = ({ profileComplete, onEdit }: DatingViewProps) => {
     )
   }
 
-  return (
-    <section className="p-4 lg:p-8 space-y-4">
-      <div className="max-w-2xl rounded-2xl border border-dchico-border bg-white p-5 shadow-sm">
-        <h2 className="text-sm font-semibold mb-2">Real matchmaking starts after Thanksgiving 🦃</h2>
-        <p className="text-xs text-dchico-muted mb-3">
-          When school is open again, we’ll test out Chico-only swipes, prompts, and mini-events. For now, hang in global chat and make sure your profile actually looks like you.
-        </p>
-        <ul className="text-xs text-dchico-muted list-disc pl-4 space-y-1">
-          <li>Matches are restricted to verified @csuchico.edu accounts.</li>
-          <li>Alias keeps you playful in chat, but dating requires real info.</li>
-          <li>Expect limited-time “Costco run” or “BMU sighting” match events.</li>
-        </ul>
-      </div>
-      <div className="grid gap-4 sm:grid-cols-2 max-w-2xl">
-        {['Finish your prompts', 'Drop into global chat', 'Start a leaderboard debate', 'Verify your phone before launch'].map(
-          (item) => (
-            <div
-              key={item}
-              className="rounded-2xl border border-dchico-border bg-white p-4 text-xs text-dchico-muted shadow-sm"
+  // Loading state
+  if (isLoadingProfiles) {
+    return (
+      <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
+        <div className="text-center">
+          <div className="text-dchico-accent text-lg font-semibold mb-2">Loading profiles...</div>
+          <p className="text-sm text-dchico-muted">Finding Wildcats for you</p>
+        </div>
+      </section>
+    )
+  }
+
+  // No profiles available
+  if (profiles.length === 0 || currentProfileIndex >= profiles.length) {
+    return (
+      <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
+        <div className="text-center max-w-md">
+          <div className="text-6xl mb-4">🎉</div>
+          <h2 className="text-xl font-semibold mb-2">You've seen everyone!</h2>
+          <p className="text-sm text-dchico-muted mb-4">
+            Check back later for new profiles, or explore other features while you wait.
+          </p>
+          <div className="flex gap-3 justify-center">
+            <button
+              onClick={() => window.location.reload()}
+              className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
             >
-              {item}
-            </div>
-          ),
-        )}
+              Refresh
+            </button>
+          </div>
+        </div>
+      </section>
+    )
+  }
+
+  const currentProfile = profiles[currentProfileIndex]
+
+  return (
+    <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
+      <div className="w-full max-w-lg">
+        <SwipeCard
+          profile={currentProfile}
+          onSwipe={onSwipe}
+          isLoading={isLoading}
+        />
+        
+        {/* Profile counter */}
+        <div className="text-center mt-4 text-sm text-dchico-muted">
+          {currentProfileIndex + 1} / {profiles.length}
+        </div>
       </div>
     </section>
   )
@@ -710,7 +837,7 @@ const ChatView = ({
   <section className="flex flex-col h-[calc(100vh-64px)] lg:h-[calc(100vh-64px)]">
     <div className="flex-1 overflow-y-auto p-4 space-y-2">
       {chatMessages.map((message) => {
-        const isMe = message.author === displayName
+        const isMe = message.alias === displayName
         return (
           <div key={message.id} className={`flex ${isMe ? 'justify-end' : 'justify-start'}`}>
             <div
@@ -725,10 +852,10 @@ const ChatView = ({
                   isMe ? 'text-white/80' : 'text-dchico-accent-secondary'
                 }`}
               >
-                {isMe ? 'you' : message.author}
+                {isMe ? 'you' : message.alias}
               </div>
-              <p>{message.text}</p>
-              <div className="text-[10px] text-dchico-muted mt-1 text-right">{message.time}</div>
+              <p>{message.message}</p>
+              <div className="text-[10px] text-dchico-muted mt-1 text-right">{formatTimestamp(message.timestamp)}</div>
             </div>
           </div>
         )
@@ -758,12 +885,18 @@ type ProfileViewProps = {
   profile: UserProfile
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   handleAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void
+  userId: string
+  profileComplete: boolean
+  setCurrentTab: (tab: Tab) => void
 }
 
 const ProfileView = ({
   profile,
   setProfile,
   handleAvatarUpload,
+  userId,
+  profileComplete,
+  setCurrentTab,
 }: ProfileViewProps) => (
   <section className="p-4 lg:p-8">
     <div className="max-w-2xl space-y-5">
@@ -848,11 +981,139 @@ const ProfileView = ({
             className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 min-h-[80px] focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
           />
         </div>
+        <div>
+          <label className="block mb-1 text-dchico-muted">Gender</label>
+          <select
+            value={profile.gender}
+            onChange={(e) => setProfile((prev) => ({ ...prev, gender: e.target.value }))}
+            className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
+          >
+            <option value="">Select gender</option>
+            <option value="Male">Male</option>
+            <option value="Female">Female</option>
+            <option value="Non-binary">Non-binary</option>
+            <option value="Prefer not to say">Prefer not to say</option>
+          </select>
+        </div>
+        <div>
+          <label className="block mb-1 text-dchico-muted">Show me</label>
+          <select
+            value={profile.genderPreference}
+            onChange={(e) => setProfile((prev) => ({ ...prev, genderPreference: e.target.value }))}
+            className="w-full rounded-xl bg-white border border-dchico-border px-3 py-2 focus:outline-none focus:ring-2 focus:ring-dchico-accent/60"
+          >
+            <option value="Male">Men</option>
+            <option value="Female">Women</option>
+            <option value="Both">Everyone</option>
+          </select>
+        </div>
       </div>
 
-      <button className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition">
-        Save changes
-      </button>
+      <div className="flex gap-3">
+        <button 
+          onClick={async () => {
+            if (userId) {
+              try {
+                console.log('Saving profile for userId:', userId)
+                console.log('Profile data:', {
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  alias: profile.alias,
+                  bio: profile.bio,
+                  age: profile.age,
+                  ethnicity: profile.ethnicity,
+                  interests: profile.interests,
+                  photos: profile.galleryUrls,
+                  avatarUrl: profile.avatarUrl,
+                })
+                
+                await updateUserProfile(userId, {
+                  firstName: profile.firstName,
+                  lastName: profile.lastName,
+                  alias: profile.alias,
+                  bio: profile.bio,
+                  age: profile.age,
+                  ethnicity: profile.ethnicity,
+                  interests: profile.interests,
+                  gender: profile.gender,
+                  genderPreference: profile.genderPreference,
+                  photos: profile.galleryUrls,
+                  avatarUrl: profile.avatarUrl,
+                } as any)
+                
+                console.log('Profile saved successfully!')
+                alert('Profile saved successfully!')
+                
+                // Navigate back to Dating tab if profile is now complete
+                if (profileComplete) {
+                  setCurrentTab('dating')
+                }
+              } catch (error: any) {
+                console.error('Error saving profile:', error)
+                console.error('Error message:', error.message)
+                console.error('Error stack:', error.stack)
+                alert(`Failed to save profile: ${error.message || 'Unknown error'}`)
+              }
+            } else {
+              console.error('No userId available')
+              alert('User ID not found. Please try logging out and back in.')
+            }
+          }}
+          className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
+        >
+          Save changes
+        </button>
+
+        <button 
+          onClick={async () => {
+            if (userId) {
+              const confirmDelete = window.confirm(
+                '⚠️ WARNING: This will permanently delete your account and all data!\n\n' +
+                'This includes:\n' +
+                '• Your profile\n' +
+                '• All photos\n' +
+                '• Swipe history\n' +
+                '• Matches\n\n' +
+                'This action CANNOT be undone!\n\n' +
+                'Are you absolutely sure you want to delete your account?'
+              )
+              
+              if (confirmDelete) {
+                const doubleCheck = window.confirm(
+                  'Last chance! Are you 100% sure?\n\n' +
+                  'Type "DELETE" in the next prompt to confirm.'
+                )
+                
+                if (doubleCheck) {
+                  const finalConfirm = window.prompt(
+                    'Type DELETE (in capital letters) to permanently delete your account:'
+                  )
+                  
+                  if (finalConfirm === 'DELETE') {
+                    try {
+                      console.log('Deleting account for userId:', userId)
+                      await deleteUserProfile(userId)
+                      alert('Account deleted successfully! Please sign up again for your fun dating journey! 🎉')
+                      // No need to logout - auth account is already deleted
+                      window.location.reload()
+                    } catch (error: any) {
+                      console.error('Error deleting account:', error)
+                      alert(`Failed to delete account: ${error.message || 'Unknown error'}`)
+                    }
+                  } else {
+                    alert('Account deletion cancelled. You must type DELETE exactly.')
+                  }
+                } else {
+                  alert('Account deletion cancelled.')
+                }
+              }
+            }
+          }}
+          className="rounded-full bg-red-600 px-6 py-2 text-sm font-semibold text-white hover:bg-red-700 transition"
+        >
+          Delete Account
+        </button>
+      </div>
     </div>
   </section>
 )

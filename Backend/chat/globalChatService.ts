@@ -4,16 +4,11 @@
  */
 
 import {
-  collection,
-  addDoc,
-  query,
-  orderBy,
-  limit,
-  getDocs,
-  serverTimestamp,
-  Timestamp,
-} from 'firebase/firestore';
-import { DatabaseGateway } from '../Database/databaseGateway';
+  adminDb,
+  adminFieldValue,
+  adminTimestamp,
+} from '../config/firebaseAdmin';
+import type { Timestamp } from 'firebase-admin/firestore';
 
 const GLOBAL_CHAT_COLLECTION = 'global_chat';
 const MESSAGE_LIMIT = 50; // Load last 50 messages
@@ -66,16 +61,14 @@ export const sendGlobalMessage = async (
       };
     }
 
-    const db = DatabaseGateway.getFirestore();
-    const chatRef = collection(db, GLOBAL_CHAT_COLLECTION);
+    const chatRef = adminDb.collection(GLOBAL_CHAT_COLLECTION);
 
-    // Add message to Firestore
-    const docRef = await addDoc(chatRef, {
+    const docRef = await chatRef.add({
       userId,
       email,
       alias,
       message: message.trim(),
-      timestamp: serverTimestamp(),
+      timestamp: adminFieldValue.serverTimestamp(),
       createdAt: new Date().toISOString(),
     });
 
@@ -103,25 +96,16 @@ export const getRecentMessages = async (): Promise<{
   error?: string;
 }> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const chatRef = collection(db, GLOBAL_CHAT_COLLECTION);
+    const chatRef = adminDb.collection(GLOBAL_CHAT_COLLECTION);
+    const querySnapshot = await chatRef
+      .orderBy('timestamp', 'desc')
+      .limit(MESSAGE_LIMIT)
+      .get();
 
-    // Query last 50 messages, ordered by timestamp descending
-    const q = query(
-      chatRef,
-      orderBy('timestamp', 'desc'),
-      limit(MESSAGE_LIMIT)
-    );
-
-    const querySnapshot = await getDocs(q);
-
-    const messages: ChatMessage[] = [];
-    querySnapshot.forEach((doc) => {
-      messages.push({
-        id: doc.id,
-        ...doc.data(),
-      } as ChatMessage);
-    });
+    const messages: ChatMessage[] = querySnapshot.docs.map((docSnapshot) => ({
+      id: docSnapshot.id,
+      ...(docSnapshot.data() as Omit<ChatMessage, 'id'>),
+    }));
 
     // Reverse to show oldest first
     messages.reverse();
@@ -151,9 +135,8 @@ export const deleteMessage = async (
     // TODO: Add admin check
     // For now, users can only delete their own messages
     
-    const db = DatabaseGateway.getFirestore();
-    const messageRef = collection(db, GLOBAL_CHAT_COLLECTION);
-    
+    const messageRef = adminDb.collection(GLOBAL_CHAT_COLLECTION).doc(messageId);
+
     // TODO: Implement delete logic with permission check
     
     return {

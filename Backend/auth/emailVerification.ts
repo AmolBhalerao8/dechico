@@ -1,13 +1,3 @@
-import {
-  getFirestore,
-  collection,
-  doc,
-  setDoc,
-  getDoc,
-  deleteDoc,
-  Timestamp,
-  type Firestore,
-} from "firebase/firestore";
 import { createTransport, type Transporter } from "nodemailer";
 import {
   getAuth,
@@ -20,6 +10,8 @@ import { google } from "googleapis";
 
 // Import Firebase config from Database folder
 import { firebaseConfig } from "../Database/firebaseConfig";
+import { adminDb, adminTimestamp } from "../config/firebaseAdmin";
+import type { Timestamp } from "firebase-admin/firestore";
 
 // Constants
 const CSU_CHICO_DOMAIN = "@csuchico.edu";
@@ -30,7 +22,6 @@ const MAX_RETRY_ATTEMPTS = 5;
 
 // Firebase instances
 let firebaseAppInstance: FirebaseApp;
-let firestoreInstance: Firestore;
 let authInstance: Auth;
 
 const getFirebaseApp = (): FirebaseApp => {
@@ -42,13 +33,6 @@ const getFirebaseApp = (): FirebaseApp => {
     }
   }
   return firebaseAppInstance;
-};
-
-const getFirestoreClient = (): Firestore => {
-  if (!firestoreInstance) {
-    firestoreInstance = getFirestore(getFirebaseApp());
-  }
-  return firestoreInstance;
 };
 
 const getAuthClient = (): Auth => {
@@ -122,29 +106,29 @@ const storeVerificationCode = async (
   email: string,
   code: string
 ): Promise<void> => {
-  const db = getFirestoreClient();
-  const verificationRef = doc(db, VERIFICATION_COLLECTION, email);
+  const verificationRef = adminDb.collection(VERIFICATION_COLLECTION).doc(email);
 
-  // Check if there's an existing verification attempt
-  const existingDoc = await getDoc(verificationRef);
+  const existingDoc = await verificationRef.get();
   let attempts = 0;
 
-  if (existingDoc.exists()) {
+  if (existingDoc.exists) {
     const data = existingDoc.data();
-    attempts = data.attempts || 0;
+    const attemptCount = data?.attempts ?? 0;
 
-    if (attempts >= MAX_RETRY_ATTEMPTS) {
+    if (attemptCount >= MAX_RETRY_ATTEMPTS) {
       throw new Error(
         "Maximum verification attempts reached. Please try again later."
       );
     }
+
+    attempts = attemptCount;
   }
 
-  await setDoc(verificationRef, {
+  await verificationRef.set({
     email,
     code,
-    createdAt: Timestamp.now(),
-    expiresAt: Timestamp.fromMillis(
+    createdAt: adminTimestamp.now(),
+    expiresAt: adminTimestamp.fromMillis(
       Date.now() + CODE_EXPIRATION_MINUTES * 60 * 1000
     ),
     verified: false,
@@ -223,16 +207,18 @@ export const verifyCode = async (
   code: string
 ): Promise<boolean> => {
   const normalizedEmail = email.trim().toLowerCase();
-  const db = getFirestoreClient();
-  const verificationRef = doc(db, VERIFICATION_COLLECTION, normalizedEmail);
+  const verificationRef = adminDb.collection(VERIFICATION_COLLECTION).doc(normalizedEmail);
 
-  const verificationDoc = await getDoc(verificationRef);
+  const verificationDoc = await verificationRef.get();
 
-  if (!verificationDoc.exists()) {
+  if (!verificationDoc.exists) {
     throw new Error("No verification code found for this email.");
   }
 
   const data = verificationDoc.data();
+  if (!data) {
+    throw new Error("Verification record is corrupted.");
+  }
 
   // Check if already verified
   if (data.verified) {
@@ -240,7 +226,7 @@ export const verifyCode = async (
   }
 
   // Check if expired
-  const now = Timestamp.now();
+  const now = adminTimestamp.now();
   if (now.toMillis() > data.expiresAt.toMillis()) {
     throw new Error("Verification code has expired. Please request a new one.");
   }
@@ -251,11 +237,10 @@ export const verifyCode = async (
   }
 
   // Mark as verified
-  await setDoc(
-    verificationRef,
+  await verificationRef.set(
     {
       verified: true,
-      verifiedAt: Timestamp.now(),
+      verifiedAt: adminTimestamp.now(),
     },
     { merge: true }
   );
@@ -270,17 +255,16 @@ export const verifyCode = async (
  */
 export const isEmailVerified = async (email: string): Promise<boolean> => {
   const normalizedEmail = email.trim().toLowerCase();
-  const db = getFirestoreClient();
-  const verificationRef = doc(db, VERIFICATION_COLLECTION, normalizedEmail);
+  const verificationRef = adminDb.collection(VERIFICATION_COLLECTION).doc(normalizedEmail);
 
-  const verificationDoc = await getDoc(verificationRef);
+  const verificationDoc = await verificationRef.get();
 
-  if (!verificationDoc.exists()) {
+  if (!verificationDoc.exists) {
     return false;
   }
 
   const data = verificationDoc.data();
-  return data.verified === true;
+  return data?.verified === true;
 };
 
 /**
@@ -318,9 +302,8 @@ export const createVerifiedUser = async (
   );
 
   // Clean up verification record after successful account creation
-  const db = getFirestoreClient();
-  const verificationRef = doc(db, VERIFICATION_COLLECTION, normalizedEmail);
-  await deleteDoc(verificationRef);
+  const verificationRef = adminDb.collection(VERIFICATION_COLLECTION).doc(normalizedEmail);
+  await verificationRef.delete();
 
   return userCredential;
 };
@@ -330,9 +313,8 @@ export const createVerifiedUser = async (
  */
 export const deleteVerificationRecord = async (email: string): Promise<void> => {
   const normalizedEmail = email.trim().toLowerCase();
-  const db = getFirestoreClient();
-  const verificationRef = doc(db, VERIFICATION_COLLECTION, normalizedEmail);
-  await deleteDoc(verificationRef);
+  const verificationRef = adminDb.collection(VERIFICATION_COLLECTION).doc(normalizedEmail);
+  await verificationRef.delete();
 };
 
 // Export as a module

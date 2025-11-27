@@ -11,10 +11,6 @@ import {
   initializeApp,
   type FirebaseApp,
 } from "firebase/app";
-import {
-  getFirestore,
-  type Firestore,
-} from "firebase/firestore";
 import { firebaseConfig } from "./firebaseConfig";
 
 const getFirebaseApp = (): FirebaseApp => {
@@ -26,7 +22,6 @@ const getFirebaseApp = (): FirebaseApp => {
 };
 
 let authInstance: Auth;
-let firestoreInstance: Firestore;
 
 const getAuthClient = (): Auth => {
   if (!authInstance) {
@@ -34,14 +29,6 @@ const getAuthClient = (): Auth => {
   }
 
   return authInstance;
-};
-
-const getFirestoreClient = (): Firestore => {
-  if (!firestoreInstance) {
-    firestoreInstance = getFirestore(getFirebaseApp());
-  }
-
-  return firestoreInstance;
 };
 
 /**
@@ -65,7 +52,6 @@ export const userLogin = (
 export const DatabaseGateway = {
   addUser,
   userLogin,
-  getFirestore: getFirestoreClient,
 };
 
 export type DatabaseGatewayType = typeof DatabaseGateway;

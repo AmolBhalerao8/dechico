@@ -3,18 +3,8 @@
  * Handles match creation and retrieval
  */
 
-import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  Timestamp,
-  or,
-  and,
-} from 'firebase/firestore';
-import { DatabaseGateway } from '../Database/databaseGateway';
+import { Filter, Timestamp } from 'firebase-admin/firestore';
+import { adminDb, adminFieldValue } from '../config/firebaseAdmin';
 import { UserService } from '../user/userService';
 
 const MATCHES_COLLECTION = 'matches';
@@ -58,16 +48,15 @@ export const createMatch = async (
       };
     }
 
-    const db = DatabaseGateway.getFirestore();
-    const matchesRef = collection(db, MATCHES_COLLECTION);
+    const matchesRef = adminDb.collection(MATCHES_COLLECTION);
 
     // Create match document
-    const docRef = await addDoc(matchesRef, {
+    const docRef = await matchesRef.add({
       user1Id,
       user1Email,
       user2Id,
       user2Email,
-      matchedAt: serverTimestamp(),
+      matchedAt: adminFieldValue.serverTimestamp(),
     });
 
     return {
@@ -92,25 +81,19 @@ export const getMatchBetweenUsers = async (
   userId2: string
 ): Promise<Match | null> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const matchesRef = collection(db, MATCHES_COLLECTION);
-
-    // Query for match in either direction
-    const q = query(
-      matchesRef,
-      or(
-        and(
-          where('user1Id', '==', userId1),
-          where('user2Id', '==', userId2)
-        ),
-        and(
-          where('user1Id', '==', userId2),
-          where('user2Id', '==', userId1)
-        )
-      )
+    const matchesRef = adminDb.collection(MATCHES_COLLECTION);
+    const filter = Filter.or(
+      Filter.and(
+        Filter.where('user1Id', '==', userId1),
+        Filter.where('user2Id', '==', userId2),
+      ),
+      Filter.and(
+        Filter.where('user1Id', '==', userId2),
+        Filter.where('user2Id', '==', userId1),
+      ),
     );
 
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await matchesRef.where(filter).get();
 
     if (querySnapshot.empty) {
       return null;
@@ -134,19 +117,13 @@ export const getUserMatches = async (
   userId: string
 ): Promise<MatchWithProfile[]> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const matchesRef = collection(db, MATCHES_COLLECTION);
-
-    // Query for matches where user is either user1 or user2
-    const q = query(
-      matchesRef,
-      or(
-        where('user1Id', '==', userId),
-        where('user2Id', '==', userId)
-      )
+    const matchesRef = adminDb.collection(MATCHES_COLLECTION);
+    const filter = Filter.or(
+      Filter.where('user1Id', '==', userId),
+      Filter.where('user2Id', '==', userId),
     );
 
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await matchesRef.where(filter).get();
     const matches: MatchWithProfile[] = [];
 
     // Get profile info for each matched user

@@ -18,12 +18,19 @@ export const useAuth = () => {
       setUser(firebaseUser);
       
       if (firebaseUser) {
-        // Load user profile
-        try {
-          const userProfile = await getUserProfile(firebaseUser.uid);
-          setProfile(userProfile);
-        } catch (error) {
-          console.error('Error loading user profile:', error);
+        if (firebaseUser.email) {
+          try {
+            const userProfile = await getUserProfile(
+              firebaseUser.uid,
+              firebaseUser.email,
+            );
+            setProfile(userProfile);
+          } catch (error) {
+            console.error('Error loading user profile:', error);
+          }
+        } else {
+          console.warn('Firebase user is missing an email address.');
+          setProfile(null);
         }
       } else {
         setProfile(null);

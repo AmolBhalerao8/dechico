@@ -3,16 +3,7 @@
  * Creates fake profiles in Firestore for testing the dating feature
  */
 
-import { getFirestore, collection, addDoc, serverTimestamp } from 'firebase/firestore';
-import { initializeApp, getApps } from 'firebase/app';
-import { firebaseConfig } from '../Database/firebaseConfig';
-
-// Initialize Firebase
-if (!getApps().length) {
-  initializeApp(firebaseConfig);
-}
-
-const db = getFirestore();
+import { adminDb, adminFieldValue } from '../config/firebaseAdmin';
 
 const testProfiles = [
   {
@@ -140,17 +131,17 @@ const testProfiles = [
 async function addTestProfiles() {
   console.log('🚀 Starting to add test profiles...\n');
 
-  const usersRef = collection(db, 'users');
+  const usersRef = adminDb.collection('users');
   let successCount = 0;
   let errorCount = 0;
 
   for (const profile of testProfiles) {
     try {
-      const docRef = await addDoc(usersRef, {
+      const docRef = await usersRef.add({
         ...profile,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
-        lastLogin: serverTimestamp(),
+        createdAt: adminFieldValue.serverTimestamp(),
+        updatedAt: adminFieldValue.serverTimestamp(),
+        lastLogin: adminFieldValue.serverTimestamp(),
       });
 
       console.log(`✅ Added: ${profile.name} (${profile.alias}) - ID: ${docRef.id}`);

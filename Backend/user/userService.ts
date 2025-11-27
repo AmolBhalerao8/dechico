@@ -3,44 +3,10 @@
  * Handles all user-related database operations
  */
 
-import {
-  getFirestore,
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  query,
-  where,
-  getDocs,
-  Timestamp,
-  type Firestore,
-} from "firebase/firestore";
-import { getAuth, type User } from "firebase/auth";
-import { getApp, getApps, initializeApp, type FirebaseApp } from "firebase/app";
-import { firebaseConfig } from "../Database/firebaseConfig";
+import { adminDb, adminAuth } from "../config/firebaseAdmin";
+import { RANK_POLL_VOTE_COLLECTION } from "../ranking/rankPollService";
 
 const USERS_COLLECTION = "users";
-
-let firebaseAppInstance: FirebaseApp;
-let firestoreInstance: Firestore;
-
-const getFirebaseApp = (): FirebaseApp => {
-  if (!firebaseAppInstance) {
-    if (!getApps().length) {
-      firebaseAppInstance = initializeApp(firebaseConfig);
-    } else {
-      firebaseAppInstance = getApp();
-    }
-  }
-  return firebaseAppInstance;
-};
-
-const getFirestoreClient = (): Firestore => {
-  if (!firestoreInstance) {
-    firestoreInstance = getFirestore(getFirebaseApp());
-  }
-  return firestoreInstance;
-};
 
 /**
  * User profile interface
@@ -64,11 +30,8 @@ export interface UserProfile {
  */
 export const userExistsByEmail = async (email: string): Promise<boolean> => {
   try {
-    const db = getFirestoreClient();
-    const usersRef = collection(db, USERS_COLLECTION);
-    const q = query(usersRef, where("email", "==", email.toLowerCase()));
-    const querySnapshot = await getDocs(q);
-    
+    const usersRef = adminDb.collection(USERS_COLLECTION);
+    const querySnapshot = await usersRef.where("email", "==", email.toLowerCase()).get();
     return !querySnapshot.empty;
   } catch (error) {
     console.error("Error checking user existence:", error);
@@ -81,11 +44,9 @@ export const userExistsByEmail = async (email: string): Promise<boolean> => {
  */
 export const userExistsByUid = async (uid: string): Promise<boolean> => {
   try {
-    const db = getFirestoreClient();
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    const userDoc = await getDoc(userRef);
-    
-    return userDoc.exists();
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
+    const userDoc = await userRef.get();
+    return userDoc.exists;
   } catch (error) {
     console.error("Error checking user existence:", error);
     throw error;
@@ -97,14 +58,13 @@ export const userExistsByUid = async (uid: string): Promise<boolean> => {
  */
 export const getUserProfile = async (uid: string): Promise<UserProfile | null> => {
   try {
-    const db = getFirestoreClient();
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    const userDoc = await getDoc(userRef);
-    
-    if (!userDoc.exists()) {
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
+    const userDoc = await userRef.get();
+
+    if (!userDoc.exists) {
       return null;
     }
-    
+
     return userDoc.data() as UserProfile;
   } catch (error) {
     console.error("Error getting user profile:", error);
@@ -121,8 +81,7 @@ export const createUserProfile = async (
   additionalData?: Partial<UserProfile>
 ): Promise<UserProfile> => {
   try {
-    const db = getFirestoreClient();
-    const userRef = doc(db, USERS_COLLECTION, uid);
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
     
     const now = new Date().toISOString();
     const userProfile: UserProfile = {
@@ -134,7 +93,7 @@ export const createUserProfile = async (
       ...additionalData,
     };
     
-    await setDoc(userRef, userProfile);
+    await userRef.set(userProfile);
     
     return userProfile;
   } catch (error) {
@@ -148,11 +107,8 @@ export const createUserProfile = async (
  */
 export const updateLastLogin = async (uid: string): Promise<void> => {
   try {
-    const db = getFirestoreClient();
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    
-    await setDoc(
-      userRef,
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
+    await userRef.set(
       {
         lastLogin: new Date().toISOString(),
       },
@@ -172,12 +128,76 @@ export const updateUserProfile = async (
   updates: Partial<UserProfile>
 ): Promise<void> => {
   try {
-    const db = getFirestoreClient();
-    const userRef = doc(db, USERS_COLLECTION, uid);
-    
-    await setDoc(userRef, updates, { merge: true });
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
+    await userRef.set(updates, { merge: true });
   } catch (error) {
     console.error("Error updating user profile:", error);
+    throw error;
+  }
+};
+
+/**
+ * Append photo URLs to the user's profile gallery
+ */
+export const appendPhotos = async (
+  uid: string,
+  photos: string[]
+): Promise<UserProfile> => {
+  if (!photos.length) {
+    throw new Error("No photo URLs provided.");
+  }
+
+  try {
+    const userRef = adminDb.collection(USERS_COLLECTION).doc(uid);
+
+    const updatedProfile = await adminDb.runTransaction(async (transaction) => {
+      const snapshot = await transaction.get(userRef);
+
+      if (!snapshot.exists) {
+        throw new Error("User profile not found.");
+      }
+
+      const currentProfile = snapshot.data() as UserProfile;
+      const mergedPhotos = [...(currentProfile.photos ?? []), ...photos];
+
+      transaction.set(
+        userRef,
+        {
+          photos: mergedPhotos,
+        },
+        { merge: true }
+      );
+
+      return {
+        ...currentProfile,
+        photos: mergedPhotos,
+      };
+    });
+
+    return updatedProfile;
+  } catch (error) {
+    console.error("Error appending user photos:", error);
+    throw error;
+  }
+};
+
+export const deleteUserAccount = async (uid: string): Promise<void> => {
+  try {
+    await adminDb.collection(USERS_COLLECTION).doc(uid).delete();
+
+    const voteSnapshot = await adminDb
+      .collection(RANK_POLL_VOTE_COLLECTION)
+      .where("userId", "==", uid)
+      .get();
+    await Promise.all(voteSnapshot.docs.map((doc) => doc.ref.delete()));
+
+    const chatSnapshot = await adminDb
+      .collection("global_chat")
+      .where("userId", "==", uid)
+      .get();
+    await Promise.all(chatSnapshot.docs.map((doc) => doc.ref.delete()));
+  } catch (error) {
+    console.error("Error deleting user account data:", error);
     throw error;
   }
 };
@@ -189,6 +209,8 @@ export const UserService = {
   createUserProfile,
   updateLastLogin,
   updateUserProfile,
+  appendPhotos,
+  deleteUserAccount,
 };
 
 export type UserServiceType = typeof UserService;

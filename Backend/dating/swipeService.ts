@@ -4,15 +4,11 @@
  */
 
 import {
-  collection,
-  addDoc,
-  query,
-  where,
-  getDocs,
-  serverTimestamp,
-  Timestamp,
-} from 'firebase/firestore';
-import { DatabaseGateway } from '../Database/databaseGateway';
+  adminDb,
+  adminFieldValue,
+  adminTimestamp,
+} from '../config/firebaseAdmin';
+import type { Timestamp } from 'firebase-admin/firestore';
 
 const SWIPES_COLLECTION = 'swipes';
 const COOLDOWN_DAYS = 10;
@@ -70,22 +66,21 @@ export const recordSwipe = async (
       };
     }
 
-    const db = DatabaseGateway.getFirestore();
-    const swipesRef = collection(db, SWIPES_COLLECTION);
+    const swipesRef = adminDb.collection(SWIPES_COLLECTION);
 
     // Calculate cooldown date (10 days from now)
     const now = new Date();
     const cooldownDate = new Date(now.getTime() + COOLDOWN_DAYS * 24 * 60 * 60 * 1000);
 
     // Record the swipe
-    await addDoc(swipesRef, {
+    await swipesRef.add({
       swiperId,
       swiperEmail,
       swipedId,
       swipedEmail,
       direction,
-      timestamp: serverTimestamp(),
-      cooldownUntil: Timestamp.fromDate(cooldownDate),
+      timestamp: adminFieldValue.serverTimestamp(),
+      cooldownUntil: adminTimestamp.fromDate(cooldownDate),
     });
 
     // If right swipe, check for match
@@ -116,20 +111,15 @@ export const hasSwipedRecently = async (
   swipedId: string
 ): Promise<boolean> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const swipesRef = collection(db, SWIPES_COLLECTION);
+    const swipesRef = adminDb.collection(SWIPES_COLLECTION);
 
-    const now = Timestamp.now();
+    const now = adminTimestamp.now();
 
-    // Query for swipes from this user to target user
-    const q = query(
-      swipesRef,
-      where('swiperId', '==', swiperId),
-      where('swipedId', '==', swipedId),
-      where('cooldownUntil', '>', now)
-    );
-
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await swipesRef
+      .where('swiperId', '==', swiperId)
+      .where('swipedId', '==', swipedId)
+      .where('cooldownUntil', '>', now)
+      .get();
     return !querySnapshot.empty;
   } catch (error) {
     console.error('Error checking swipe history:', error);
@@ -145,18 +135,13 @@ export const checkForMatch = async (
   userId2: string
 ): Promise<boolean> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const swipesRef = collection(db, SWIPES_COLLECTION);
+    const swipesRef = adminDb.collection(SWIPES_COLLECTION);
 
-    // Check if userId2 has right swiped userId1
-    const q = query(
-      swipesRef,
-      where('swiperId', '==', userId2),
-      where('swipedId', '==', userId1),
-      where('direction', '==', 'right')
-    );
-
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await swipesRef
+      .where('swiperId', '==', userId2)
+      .where('swipedId', '==', userId1)
+      .where('direction', '==', 'right')
+      .get();
     return !querySnapshot.empty;
   } catch (error) {
     console.error('Error checking for match:', error);
@@ -169,19 +154,14 @@ export const checkForMatch = async (
  */
 export const getSwipedUserIds = async (userId: string): Promise<string[]> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const swipesRef = collection(db, SWIPES_COLLECTION);
+    const swipesRef = adminDb.collection(SWIPES_COLLECTION);
 
-    const now = Timestamp.now();
+    const now = adminTimestamp.now();
 
-    // Get all swipes from this user that are still in cooldown
-    const q = query(
-      swipesRef,
-      where('swiperId', '==', userId),
-      where('cooldownUntil', '>', now)
-    );
-
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await swipesRef
+      .where('swiperId', '==', userId)
+      .where('cooldownUntil', '>', now)
+      .get();
     const swipedIds: string[] = [];
 
     querySnapshot.forEach((doc) => {

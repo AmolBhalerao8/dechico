@@ -1,13 +1,11 @@
 import { useEffect, useMemo, useState } from 'react'
-import type { ChangeEvent, FormEvent } from 'react'
+import type { ChangeEvent, FormEvent, ReactNode } from 'react'
 import { useAuth } from './hooks/useAuth'
 import { AuthModal } from './components/AuthModalImproved'
+import { RankingView } from './components/RankingView'
 import { saveProfile, updateUserProfile, deleteUserProfile } from './services/userService'
 import { logoutUser } from './services/authService'
-import { subscribeToGlobalChat, sendGlobalMessage, formatTimestamp } from './services/chatService'
-import { getSwipeableProfiles, recordSwipe, type DatingProfile } from './services/datingService'
-import { SwipeCard } from './components/SwipeCard'
-import { MatchModal } from './components/MatchModal'
+import { fetchGlobalChatMessages, sendGlobalMessage, formatTimestamp } from './services/chatService'
 
 type Tab = 'dating' | 'leaderboard' | 'chat' | 'profile'
 type AuthMode = 'login' | 'signup' | null
@@ -18,7 +16,7 @@ type ChatMessage = {
   email: string
   alias: string
   message: string
-  timestamp: any
+  timestamp?: any
   createdAt: string
 }
 
@@ -50,14 +48,6 @@ const initialProfile: UserProfile = {
   galleryUrls: [],
 }
 
-const leaderboardItems = [
-  '2am Jack’s karaoke with people you barely know',
-  'Costco runs in pajamas before a midterm',
-  'Accidentally matching outfits with half your CS lab',
-  'Seeing your HCOM prof at Safeway at midnight',
-  'Trying to study at Bidwell but ending up in a friend’s hammock',
-]
-
 type WordmarkProps = {
   className?: string
 }
@@ -80,20 +70,9 @@ const App = () => {
   const [profile, setProfile] = useState<UserProfile>(initialProfile)
   const [chatMessages, setChatMessages] = useState<ChatMessage[]>([])
   const [chatInput, setChatInput] = useState('')
-  const [leaderboardVotes, setLeaderboardVotes] = useState(
-    leaderboardItems.map(() => Math.floor(Math.random() * 5) + 1),
-  )
   const [showProfileArrow, setShowProfileArrow] = useState(false)
   const [pendingProfileArrow, setPendingProfileArrow] = useState(false)
   
-  // Dating state
-  const [datingProfiles, setDatingProfiles] = useState<DatingProfile[]>([])
-  const [currentProfileIndex, setCurrentProfileIndex] = useState(0)
-  const [isSwipeLoading, setIsSwipeLoading] = useState(false)
-  const [showMatchModal, setShowMatchModal] = useState(false)
-  const [matchedProfile, setMatchedProfile] = useState<DatingProfile | null>(null)
-  const [isLoadingProfiles, setIsLoadingProfiles] = useState(false)
-
   const displayName = useMemo(() => {
     const fallback =
       [profile.firstName, profile.lastName].filter(Boolean).join(' ') ||
@@ -238,8 +217,12 @@ const App = () => {
     
     // Save profile to Firebase
     if (user) {
+      if (!user.email) {
+        alert('Missing email for this account. Please log out and log back in.');
+        return;
+      }
       try {
-        await saveProfile(user.uid, user.email || '', {
+        await saveProfile(user.uid, user.email, {
           firstName: profile.firstName,
           lastName: profile.lastName,
           alias: profile.alias,
@@ -268,28 +251,42 @@ const App = () => {
     try {
       await sendGlobalMessage(user.uid, user.email || '', displayName, chatInput.trim())
       setChatInput('')
+      const latest = await fetchGlobalChatMessages()
+      setChatMessages(latest)
     } catch (error) {
       console.error('Error sending message:', error)
       alert('Failed to send message. Please try again.')
     }
   }
 
-  // Subscribe to real-time chat messages
+  // Poll chat messages via backend
   useEffect(() => {
     if (!isLoggedIn) return
 
-    const unsubscribe = subscribeToGlobalChat((messages) => {
-      setChatMessages(messages)
-    })
+    let cancelled = false
+    let interval: number | undefined
 
-    return () => unsubscribe()
+    const loadMessages = async () => {
+      try {
+        const messages = await fetchGlobalChatMessages()
+        if (!cancelled) {
+          setChatMessages(messages)
+        }
+      } catch (error) {
+        console.error('Error fetching chat messages:', error)
+      }
+    }
+
+    loadMessages()
+    interval = window.setInterval(loadMessages, 5000)
+
+    return () => {
+      cancelled = true
+      if (interval) {
+        window.clearInterval(interval)
+      }
+    }
   }, [isLoggedIn])
-
-  const handleVote = (index: number) => {
-    setLeaderboardVotes((prev) =>
-      prev.map((value, i) => (i === index ? value + 1 : value)),
-    )
-  }
 
   useEffect(() => {
     if (currentTab === 'profile' && showProfileArrow) {
@@ -328,83 +325,6 @@ const App = () => {
     }
   }
 
-  // Load dating profiles
-  const loadDatingProfiles = async () => {
-    if (!user) {
-      console.log('No user, cannot load profiles')
-      return
-    }
-
-    console.log('Loading dating profiles for user:', user.uid)
-    setIsLoadingProfiles(true)
-    try {
-      const profiles = await getSwipeableProfiles(user.uid)
-      console.log('Loaded profiles:', profiles.length, profiles)
-      setDatingProfiles(profiles)
-      setCurrentProfileIndex(0)
-    } catch (error) {
-      console.error('Error loading profiles:', error)
-      // Don't show alert - just log the error
-      // User will see "You've seen everyone!" message instead
-      setDatingProfiles([])
-    } finally {
-      setIsLoadingProfiles(false)
-    }
-  }
-
-  // Handle swipe action
-  const handleSwipe = async (direction: 'left' | 'right') => {
-    if (!user || !datingProfiles[currentProfileIndex]) return
-
-    const swipedProfile = datingProfiles[currentProfileIndex]
-    setIsSwipeLoading(true)
-
-    try {
-      const result = await recordSwipe(
-        user.uid,
-        user.email || '',
-        swipedProfile.userId,
-        swipedProfile.email,
-        direction
-      )
-
-      if (result.isMatch) {
-        // Show match modal
-        setMatchedProfile(swipedProfile)
-        setShowMatchModal(true)
-      }
-
-      // Move to next profile
-      if (currentProfileIndex < datingProfiles.length - 1) {
-        setCurrentProfileIndex(currentProfileIndex + 1)
-      } else {
-        // Load more profiles
-        await loadDatingProfiles()
-      }
-    } catch (error) {
-      console.error('Error recording swipe:', error)
-      alert('Failed to record swipe. Please try again.')
-    } finally {
-      setIsSwipeLoading(false)
-    }
-  }
-
-  // Load profiles when user logs in and profile is complete
-  useEffect(() => {
-    console.log('Dating useEffect triggered:', { isLoggedIn, profileComplete, currentTab })
-    if (isLoggedIn && profileComplete && currentTab === 'dating') {
-      console.log('Conditions met, loading profiles...')
-      loadDatingProfiles()
-    } else {
-      console.log('Conditions not met:', {
-        isLoggedIn,
-        profileComplete,
-        currentTab,
-        reason: !isLoggedIn ? 'Not logged in' : !profileComplete ? 'Profile incomplete' : 'Not on dating tab'
-      })
-    }
-  }, [isLoggedIn, profileComplete, currentTab])
-
   // Show loading state
   if (loading) {
     return (
@@ -439,21 +359,23 @@ const App = () => {
 
       <div className="flex-1 flex flex-col min-h-screen">
         <TopBar currentTab={currentTab} displayName={displayName} />
-        <main className="flex-1 overflow-y-auto">
+        <main className="flex-1 overflow-y-auto pb-24 lg:pb-0">
           {currentTab === 'dating' && (
-            <DatingView 
-              profileComplete={profileComplete} 
-              onEdit={() => setCurrentTab('profile')}
-              profiles={datingProfiles}
-              currentProfileIndex={currentProfileIndex}
-              onSwipe={handleSwipe}
-              isLoading={isSwipeLoading}
-              isLoadingProfiles={isLoadingProfiles}
+            <ComingSoonView
+              badge="🔔 Dating unlocks Monday"
+              title="Happy DeChico-giving 🦃"
+              lines={[
+                'Dating goes live Monday when everyone’s back on campus.',
+                'Finish your profile now so you’re in the first batch of matches.',
+                'Spam Global Chat with the kind of app you want — we’re literally recording everything and building from it.',
+              ]}
+              primaryLabel="Complete my profile"
+              secondaryLabel="Open Global Chat"
+              onPrimaryClick={() => setCurrentTab('profile')}
+              onSecondaryClick={() => setCurrentTab('chat')}
             />
           )}
-          {currentTab === 'leaderboard' && (
-            <LeaderboardView votes={leaderboardVotes} onVote={handleVote} />
-          )}
+          {currentTab === 'leaderboard' && <RankingView />}
           {currentTab === 'chat' && (
             <ChatView
               chatMessages={chatMessages}
@@ -469,6 +391,7 @@ const App = () => {
               setProfile={setProfile} 
               handleAvatarUpload={handleAvatarUpload}
               userId={user.uid}
+              userEmail={user.email ?? undefined}
               profileComplete={profileComplete}
               setCurrentTab={setCurrentTab}
             />
@@ -487,15 +410,6 @@ const App = () => {
         profileComplete={profileComplete}
       />
       <CongratsModal show={showCongrats} onContinue={handleCongratsContinue} />
-      <MatchModal 
-        show={showMatchModal}
-        matchedProfile={matchedProfile}
-        onClose={() => setShowMatchModal(false)}
-        onSendMessage={() => {
-          setShowMatchModal(false)
-          setCurrentTab('chat')
-        }}
-      />
       {showProfileArrow && <ProfilePointerOverlay />}
     </div>
   )
@@ -669,9 +583,9 @@ const TopBar = ({ currentTab, displayName }: TopBarProps) => {
 
   const subtitleMap: Record<Tab, string> = {
     dating:
-      'Finish your profile now. Real matchmaking starts after Thanksgiving when school is open.',
+      'Matching unlocks soon. Finish your profile now so you’re ready when we flip the switch.',
     leaderboard:
-      'Rank the freakiest things you all secretly love or hate about Chico.',
+      'Ranking is paused while we ship verified profiles + chat. Coming soon.',
     chat: 'Anonymous-ish small talk. Don’t be weird in a bad way.',
     profile: 'Alias shows in chat; real details prep you for future matchmaking.',
   }
@@ -692,129 +606,81 @@ const TopBar = ({ currentTab, displayName }: TopBarProps) => {
   )
 }
 
-type DatingViewProps = {
-  profileComplete: boolean
-  onEdit: () => void
-  profiles: DatingProfile[]
-  currentProfileIndex: number
-  onSwipe: (direction: 'left' | 'right') => void
-  isLoading: boolean
-  isLoadingProfiles: boolean
+type ComingSoonViewProps = {
+  title: string
+  description?: string
+  lines?: string[]
+  extra?: ReactNode
+  badge?: string
+  onPrimaryClick?: () => void
+  primaryLabel?: string
+  onSecondaryClick?: () => void
+  secondaryLabel?: string
 }
 
-const DatingView = ({ 
-  profileComplete, 
-  onEdit, 
-  profiles, 
-  currentProfileIndex, 
-  onSwipe, 
-  isLoading,
-  isLoadingProfiles 
-}: DatingViewProps) => {
-  if (!profileComplete) {
-    return (
-      <section className="p-4 lg:p-8">
-        <div className="max-w-xl rounded-2xl border border-amber-500/40 bg-[#fff3e5] p-5">
-          <h2 className="text-sm font-semibold mb-1">Complete your profile to unlock dating</h2>
-          <p className="text-xs text-[#8a5224] mb-3">
-            Add a photo, name (or alias), age, gender, and who you want to see. Then start swiping!
-          </p>
-          <button
-            onClick={onEdit}
-            className="rounded-full bg-amber-500 text-white px-4 py-1.5 text-xs font-semibold hover:brightness-110 transition"
-          >
-            Go to profile
-          </button>
-        </div>
-      </section>
-    )
-  }
-
-  // Loading state
-  if (isLoadingProfiles) {
-    return (
-      <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
-        <div className="text-center">
-          <div className="text-dchico-accent text-lg font-semibold mb-2">Loading profiles...</div>
-          <p className="text-sm text-dchico-muted">Finding Wildcats for you</p>
-        </div>
-      </section>
-    )
-  }
-
-  // No profiles available
-  if (profiles.length === 0 || currentProfileIndex >= profiles.length) {
-    return (
-      <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
-        <div className="text-center max-w-md">
-          <div className="text-6xl mb-4">🎉</div>
-          <h2 className="text-xl font-semibold mb-2">You've seen everyone!</h2>
-          <p className="text-sm text-dchico-muted mb-4">
-            Check back later for new profiles, or explore other features while you wait.
-          </p>
-          <div className="flex gap-3 justify-center">
-            <button
-              onClick={() => window.location.reload()}
-              className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
-            >
-              Refresh
-            </button>
+const ComingSoonView = ({
+  title,
+  description,
+  lines,
+  extra,
+  badge,
+  onPrimaryClick,
+  primaryLabel = 'Hop into Global Chat',
+  onSecondaryClick,
+  secondaryLabel = 'Tell us what you want',
+}: ComingSoonViewProps) => (
+  <section className="p-6 lg:p-12 flex items-center justify-center min-h-[70vh]">
+    <div className="max-w-4xl w-full">
+      <div className="rounded-3xl bg-white/90 border border-dchico-border shadow-xl shadow-dchico-border/25 px-8 py-10 lg:px-12 lg:py-14 flex flex-col items-center text-center gap-5">
+        {(badge ?? '🍂 Fall launch • Profiles live, matching next') && (
+          <div className="inline-flex items-center gap-2 rounded-full bg-dchico-panel/70 px-4 py-1 text-[11px] uppercase tracking-wide text-dchico-muted">
+            <span>{badge ?? '🍂 Fall launch • Profiles live, matching next'}</span>
           </div>
+        )}
+        <div>
+          <h2 className="text-3xl lg:text-4xl font-semibold mb-2">{title}</h2>
+          {description && !lines && (
+            <p className="text-sm lg:text-base text-dchico-muted max-w-2xl mx-auto">{description}</p>
+          )}
         </div>
-      </section>
-    )
-  }
-
-  const currentProfile = profiles[currentProfileIndex]
-
-  return (
-    <section className="p-4 lg:p-8 flex items-center justify-center min-h-[60vh]">
-      <div className="w-full max-w-lg">
-        <SwipeCard
-          profile={currentProfile}
-          onSwipe={onSwipe}
-          isLoading={isLoading}
-        />
-        
-        {/* Profile counter */}
-        <div className="text-center mt-4 text-sm text-dchico-muted">
-          {currentProfileIndex + 1} / {profiles.length}
-        </div>
+        {lines && (
+          <div className="space-y-2 text-base lg:text-lg text-dchico-muted max-w-2xl">
+            {lines.map((line) => (
+              <p key={line}>{line}</p>
+            ))}
+          </div>
+        )}
+        {!lines && extra && (
+          <div className="text-[12px] lg:text-sm text-dchico-muted space-y-2 max-w-2xl">{extra}</div>
+        )}
+        {!lines && (
+          <p className="text-xs text-dchico-muted">
+            For now, polish your profile and hang out in global chat. We’ll ping you as soon as this drops.
+          </p>
+        )}
+        {(onPrimaryClick || onSecondaryClick) && (
+          <div className="mt-4 flex flex-col sm:flex-row items-center gap-3">
+            {onPrimaryClick && (
+              <button
+                type="button"
+                onClick={onPrimaryClick}
+                className="inline-flex items-center justify-center rounded-full bg-dchico-accent px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:brightness-110 transition"
+              >
+                {primaryLabel}
+              </button>
+            )}
+            {onSecondaryClick && (
+              <button
+                type="button"
+                onClick={onSecondaryClick}
+                className="inline-flex items-center justify-center rounded-full bg-white text-dchico-accent px-5 py-2 text-sm font-semibold border border-dchico-accent shadow-sm hover:bg-dchico-panel/80 transition"
+              >
+                {secondaryLabel}
+              </button>
+            )}
+          </div>
+        )}
       </div>
-    </section>
-  )
-}
-
-type LeaderboardViewProps = {
-  votes: number[]
-  onVote: (index: number) => void
-}
-
-const LeaderboardView = ({ votes, onVote }: LeaderboardViewProps) => (
-  <section className="p-4 lg:p-8 space-y-4">
-    <p className="text-xs text-dchico-muted max-w-xl">
-      Rank the freakiest things only Wildcats understand. Votes reset when you refresh, so spam wisely.
-    </p>
-    <div className="space-y-3">
-      {leaderboardItems.map((item, index) => (
-        <div
-          key={item}
-          className="flex items-center justify-between gap-3 rounded-2xl border border-dchico-border bg-white px-4 py-3 shadow-sm"
-        >
-          <div className="flex items-center gap-3">
-            <div className="h-8 w-8 rounded-full bg-dchico-panel flex items-center justify-center text-xs text-dchico-accent">
-              #{index + 1}
-            </div>
-            <p className="text-sm text-dchico-text">{item}</p>
-          </div>
-          <button
-            onClick={() => onVote(index)}
-            className="rounded-full bg-dchico-panel px-3 py-1 text-xs hover:brightness-105 transition text-dchico-accent"
-          >
-            ▲ {votes[index]}
-          </button>
-        </div>
-      ))}
     </div>
   </section>
 )
@@ -855,7 +721,9 @@ const ChatView = ({
                 {isMe ? 'you' : message.alias}
               </div>
               <p>{message.message}</p>
-              <div className="text-[10px] text-dchico-muted mt-1 text-right">{formatTimestamp(message.timestamp)}</div>
+              <div className="text-[10px] text-dchico-muted mt-1 text-right">
+                {formatTimestamp(message.createdAt)}
+              </div>
             </div>
           </div>
         )
@@ -886,6 +754,7 @@ type ProfileViewProps = {
   setProfile: React.Dispatch<React.SetStateAction<UserProfile>>
   handleAvatarUpload: (event: ChangeEvent<HTMLInputElement>) => void
   userId: string
+  userEmail?: string
   profileComplete: boolean
   setCurrentTab: (tab: Tab) => void
 }
@@ -895,6 +764,7 @@ const ProfileView = ({
   setProfile,
   handleAvatarUpload,
   userId,
+  userEmail,
   profileComplete,
   setCurrentTab,
 }: ProfileViewProps) => (
@@ -1012,22 +882,9 @@ const ProfileView = ({
       <div className="flex gap-3">
         <button 
           onClick={async () => {
-            if (userId) {
+            if (userId && userEmail) {
               try {
-                console.log('Saving profile for userId:', userId)
-                console.log('Profile data:', {
-                  firstName: profile.firstName,
-                  lastName: profile.lastName,
-                  alias: profile.alias,
-                  bio: profile.bio,
-                  age: profile.age,
-                  ethnicity: profile.ethnicity,
-                  interests: profile.interests,
-                  photos: profile.galleryUrls,
-                  avatarUrl: profile.avatarUrl,
-                })
-                
-                await updateUserProfile(userId, {
+                await updateUserProfile(userId, userEmail, {
                   firstName: profile.firstName,
                   lastName: profile.lastName,
                   alias: profile.alias,
@@ -1039,24 +896,19 @@ const ProfileView = ({
                   genderPreference: profile.genderPreference,
                   photos: profile.galleryUrls,
                   avatarUrl: profile.avatarUrl,
-                } as any)
+                })
                 
-                console.log('Profile saved successfully!')
                 alert('Profile saved successfully!')
                 
-                // Navigate back to Dating tab if profile is now complete
                 if (profileComplete) {
                   setCurrentTab('dating')
                 }
               } catch (error: any) {
                 console.error('Error saving profile:', error)
-                console.error('Error message:', error.message)
-                console.error('Error stack:', error.stack)
                 alert(`Failed to save profile: ${error.message || 'Unknown error'}`)
               }
             } else {
-              console.error('No userId available')
-              alert('User ID not found. Please try logging out and back in.')
+              alert('User info not found. Please try logging out and back in.')
             }
           }}
           className="rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary px-6 py-2 text-sm font-semibold text-white shadow-glow hover:brightness-110 transition"
@@ -1091,14 +943,13 @@ const ProfileView = ({
                   
                   if (finalConfirm === 'DELETE') {
                     try {
-                      console.log('Deleting account for userId:', userId)
-                      await deleteUserProfile(userId)
-                      alert('Account deleted successfully! Please sign up again for your fun dating journey! 🎉')
-                      // No need to logout - auth account is already deleted
+                      await deleteUserProfile(userId, userEmail || '')
+                      await logoutUser()
+                      alert('Account deleted successfully.')
                       window.location.reload()
                     } catch (error: any) {
                       console.error('Error deleting account:', error)
-                      alert(`Failed to delete account: ${error.message || 'Unknown error'}`)
+                      alert(error.message || 'Failed to delete account.')
                     }
                   } else {
                     alert('Account deletion cancelled. You must type DELETE exactly.')

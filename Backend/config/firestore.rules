@@ -2,12 +2,26 @@ rules_version = '2';
 
 service cloud.firestore {
   match /databases/{database}/documents {
-    // Allow read/write access to email_verifications collection in test mode
-    match /email_verifications/{document=**} {
+
+    // Email verification codes
+    match /email_verifications/{docId} {
+      // Backend + clients can access for now (tighten later when backend-only)
       allow read, write: if true;
     }
-    
-    // Default deny for other collections
+
+    // User profiles
+    match /users/{userId} {
+      allow read, write: if request.auth != null && request.auth.uid == userId;
+    }
+
+    // Global chat messages
+    match /global_chat/{messageId} {
+      allow read: if true;
+      allow create: if request.auth != null;
+      allow update, delete: if false;
+    }
+
+    // Deny everything else
     match /{document=**} {
       allow read, write: if false;
     }

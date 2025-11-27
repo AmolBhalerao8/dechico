@@ -3,8 +3,7 @@
  * Removes all test profiles from Firestore
  */
 
-import { DatabaseGateway } from '../Database/databaseGateway';
-import { collection, query, where, getDocs, deleteDoc, doc } from 'firebase/firestore';
+import { adminDb } from '../config/firebaseAdmin';
 
 const USERS_COLLECTION = 'users';
 
@@ -24,21 +23,19 @@ async function deleteTestProfiles() {
   try {
     console.log('🗑️  Starting test profile deletion...\n');
     
-    const db = DatabaseGateway.getFirestore();
-    const usersRef = collection(db, USERS_COLLECTION);
+    const usersRef = adminDb.collection(USERS_COLLECTION);
     
     let deletedCount = 0;
     
     for (const email of TEST_EMAILS) {
       try {
         // Query for user with this email
-        const q = query(usersRef, where('email', '==', email));
-        const querySnapshot = await getDocs(q);
+        const querySnapshot = await usersRef.where('email', '==', email).get();
         
         if (!querySnapshot.empty) {
           // Delete each matching document
           for (const docSnapshot of querySnapshot.docs) {
-            await deleteDoc(doc(db, USERS_COLLECTION, docSnapshot.id));
+            await usersRef.doc(docSnapshot.id).delete();
             console.log(`✅ Deleted: ${email} (ID: ${docSnapshot.id})`);
             deletedCount++;
           }

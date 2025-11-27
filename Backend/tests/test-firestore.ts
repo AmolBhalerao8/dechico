@@ -1,22 +1,12 @@
-import { initializeApp } from "firebase/app";
-import { getFirestore, collection, addDoc } from "firebase/firestore";
-import { firebaseConfig } from "../Database/firebaseConfig";
+import { adminDb } from "../config/firebaseAdmin";
 
 async function testFirestore() {
   try {
     console.log('Testing Firestore connection...\n');
-    
-    // Initialize Firebase
-    const app = initializeApp(firebaseConfig);
-    console.log('✓ Firebase app initialized');
-    
-    // Get Firestore instance
-    const db = getFirestore(app);
-    console.log('✓ Firestore instance created');
-    
+
     // Try to write a test document
     console.log('\nAttempting to write test document...');
-    const docRef = await addDoc(collection(db, "test_collection"), {
+    const docRef = await adminDb.collection("test_collection").add({
       test: "Hello from DeChico",
       timestamp: new Date().toISOString()
     });

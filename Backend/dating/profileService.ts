@@ -3,15 +3,7 @@
  * Gets profiles for swiping with filtering logic
  */
 
-import {
-  collection,
-  query,
-  where,
-  getDocs,
-  limit,
-  type DocumentData,
-} from 'firebase/firestore';
-import { DatabaseGateway } from '../Database/databaseGateway';
+import { adminDb } from '../config/firebaseAdmin';
 import { SwipeService } from './swipeService';
 
 const USERS_COLLECTION = 'users';
@@ -44,13 +36,10 @@ export const getSwipeableProfiles = async (
 ): Promise<DatingProfile[]> => {
   try {
     console.log('🔍 Getting swipeable profiles for user:', currentUserId);
-    const db = DatabaseGateway.getFirestore();
-    const usersRef = collection(db, USERS_COLLECTION);
+    const usersRef = adminDb.collection(USERS_COLLECTION);
 
     // Get current user's gender preference
-    const currentUserRef = collection(db, USERS_COLLECTION);
-    const currentUserQuery = query(currentUserRef, where('uid', '==', currentUserId));
-    const currentUserSnapshot = await getDocs(currentUserQuery);
+    const currentUserSnapshot = await usersRef.where('uid', '==', currentUserId).get();
     const currentUserData = currentUserSnapshot.docs[0]?.data();
     const genderPreference = currentUserData?.genderPreference || 'Both';
     console.log('👤 User gender preference:', genderPreference);
@@ -60,13 +49,10 @@ export const getSwipeableProfiles = async (
     console.log('📋 Already swiped IDs:', swipedIds.length, swipedIds);
 
     // Query for complete profiles with photos
-    const q = query(
-      usersRef,
-      where('profileComplete', '==', true),
-      limit(limitCount + swipedIds.length + 10) // Get extra to account for filtering
-    );
-
-    const querySnapshot = await getDocs(q);
+    const querySnapshot = await usersRef
+      .where('profileComplete', '==', true)
+      .limit(limitCount + swipedIds.length + 10)
+      .get();
     console.log('📊 Query returned', querySnapshot.size, 'documents');
     const profiles: DatingProfile[] = [];
 
@@ -145,11 +131,8 @@ export const getDatingProfile = async (
   userId: string
 ): Promise<DatingProfile | null> => {
   try {
-    const db = DatabaseGateway.getFirestore();
-    const usersRef = collection(db, USERS_COLLECTION);
-    
-    const q = query(usersRef, where('uid', '==', userId));
-    const querySnapshot = await getDocs(q);
+    const usersRef = adminDb.collection(USERS_COLLECTION);
+    const querySnapshot = await usersRef.where('uid', '==', userId).get();
 
     if (querySnapshot.empty) {
       return null;

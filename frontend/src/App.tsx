@@ -72,7 +72,7 @@ const App = () => {
   const [chatInput, setChatInput] = useState('')
   const [showProfileArrow, setShowProfileArrow] = useState(false)
   const [pendingProfileArrow, setPendingProfileArrow] = useState(false)
-  
+
   const displayName = useMemo(() => {
     const fallback =
       [profile.firstName, profile.lastName].filter(Boolean).join(' ') ||
@@ -270,7 +270,7 @@ const App = () => {
       try {
         const messages = await fetchGlobalChatMessages()
         if (!cancelled) {
-          setChatMessages(messages)
+      setChatMessages(messages)
         }
       } catch (error) {
         console.error('Error fetching chat messages:', error)
@@ -635,7 +635,7 @@ const ComingSoonView = ({
         {(badge ?? '🍂 Fall launch • Profiles live, matching next') && (
           <div className="inline-flex items-center gap-2 rounded-full bg-dchico-panel/70 px-4 py-1 text-[11px] uppercase tracking-wide text-dchico-muted">
             <span>{badge ?? '🍂 Fall launch • Profiles live, matching next'}</span>
-          </div>
+        </div>
         )}
         <div>
           <h2 className="text-3xl lg:text-4xl font-semibold mb-2">{title}</h2>
@@ -661,24 +661,24 @@ const ComingSoonView = ({
         {(onPrimaryClick || onSecondaryClick) && (
           <div className="mt-4 flex flex-col sm:flex-row items-center gap-3">
             {onPrimaryClick && (
-              <button
+            <button
                 type="button"
                 onClick={onPrimaryClick}
                 className="inline-flex items-center justify-center rounded-full bg-dchico-accent px-6 py-2.5 text-sm font-semibold text-white shadow-md hover:brightness-110 transition"
-              >
+            >
                 {primaryLabel}
-              </button>
+            </button>
             )}
             {onSecondaryClick && (
-              <button
+          <button
                 type="button"
                 onClick={onSecondaryClick}
                 className="inline-flex items-center justify-center rounded-full bg-white text-dchico-accent px-5 py-2 text-sm font-semibold border border-dchico-accent shadow-sm hover:bg-dchico-panel/80 transition"
-              >
+          >
                 {secondaryLabel}
-              </button>
+          </button>
             )}
-          </div>
+        </div>
         )}
       </div>
     </div>

@@ -20,9 +20,14 @@ type ChatResponse = {
 
 export const fetchGlobalChatMessages = async (
   limit = 50,
+  uid?: string,
+  email?: string,
 ): Promise<ChatMessage[]> => {
   const query = new URLSearchParams({ limit: String(limit) });
-  const data = await apiFetch<ChatResponse>(`/api/chat/messages?${query.toString()}`);
+  const headers = uid && email ? withAuthHeaders(uid, email) : undefined;
+  const data = await apiFetch<ChatResponse>(`/api/chat/messages?${query.toString()}`, {
+    headers,
+  });
   return data.messages ?? [];
 };
 

@@ -9,8 +9,10 @@ const getApiBaseUrl = () => {
 
 export const API_BASE_URL = getApiBaseUrl();
 
-export type ApiFetchOptions = RequestInit & {
-  headers?: Record<string, string>;
+type ApiHeaders = Record<string, string>;
+
+export type ApiFetchOptions = Omit<RequestInit, 'headers'> & {
+  headers?: ApiHeaders;
 };
 
 export const apiFetch = async <TResponse = unknown>(
@@ -18,13 +20,14 @@ export const apiFetch = async <TResponse = unknown>(
   options: ApiFetchOptions = {},
 ): Promise<TResponse> => {
   const url = `${API_BASE_URL}${path}`;
-  const headers: Record<string, string> = {
+  const { headers: customHeaders, ...restOptions } = options;
+  const headers: ApiHeaders = {
     'Content-Type': 'application/json',
-    ...options.headers,
+    ...(customHeaders ?? {}),
   };
 
   const response = await fetch(url, {
-    ...options,
+    ...restOptions,
     headers,
   });
 
@@ -43,7 +46,7 @@ export const apiFetch = async <TResponse = unknown>(
   return payload as TResponse;
 };
 
-export const withAuthHeaders = (uid?: string, email?: string) => {
+export const withAuthHeaders = (uid?: string, email?: string): ApiHeaders => {
   if (!uid || !email) {
     throw new Error('Missing UID or email for authenticated request.');
   }

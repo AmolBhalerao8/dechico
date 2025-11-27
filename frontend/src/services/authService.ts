@@ -11,16 +11,7 @@ import {
   type User,
   type UserCredential,
 } from 'firebase/auth';
-import {
-  getFirestore,
-  collection,
-  doc,
-  getDoc,
-  setDoc,
-  query,
-  where,
-  getDocs,
-} from 'firebase/firestore';
+import { collection, doc, getDoc, setDoc, query, where, getDocs } from 'firebase/firestore';
 import { getFirebaseAuth, getFirebaseDb } from '../config/firebase';
 
 // Email verification code storage

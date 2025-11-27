@@ -42,8 +42,6 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
   
   // Step tracking for signup
   const [signupStep, setSignupStep] = useState<'email' | 'verify' | 'password'>('email');
-  const [codeSent, setCodeSent] = useState(false);
-  const [codeVerified, setCodeVerified] = useState(false);
 
   if (!mode) return null;
   const isSignup = mode === 'signup';
@@ -83,7 +81,6 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
         throw new Error(data.error || 'Failed to send verification code');
       }
 
-      setCodeSent(true);
       setSignupStep('verify');
       setError('');
     } catch (err: any) {
@@ -117,7 +114,6 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
       }
 
       console.log('✅ Code verified! Moving to password step...');
-      setCodeVerified(true);
       setSignupStep('password');
       console.log('📍 Signup step set to: password');
       setError('');

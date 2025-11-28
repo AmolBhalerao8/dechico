@@ -1,14 +1,29 @@
 const LOCAL_API_BASE_URL = 'http://localhost:3001';
 const PROD_FALLBACK_API_BASE_URL = 'https://dechico-backend-772774227494.us-central1.run.app';
 
-const getApiBaseUrl = () => {
-  if (import.meta?.env?.VITE_API_BASE_URL) {
-    return import.meta.env.VITE_API_BASE_URL;
+const isBrowser = typeof window !== 'undefined';
+const isLocalHost = () => {
+  if (!isBrowser) return false;
+  const hostname = window.location.hostname?.toLowerCase() ?? '';
+  return hostname === 'localhost' || hostname === '127.0.0.1';
+};
+
+const getRuntimeDefaultBaseUrl = () => {
+  if (!isBrowser) {
+    return PROD_FALLBACK_API_BASE_URL;
   }
-  if (import.meta?.env?.DEV) {
+  return isLocalHost() ? LOCAL_API_BASE_URL : PROD_FALLBACK_API_BASE_URL;
+};
+
+const getApiBaseUrl = () => {
+  const envValue = import.meta?.env?.VITE_API_BASE_URL?.trim();
+  if (envValue) {
+    return envValue;
+  }
+  if (import.meta?.env?.DEV && isLocalHost()) {
     return LOCAL_API_BASE_URL;
   }
-  return PROD_FALLBACK_API_BASE_URL;
+  return getRuntimeDefaultBaseUrl();
 };
 
 export const API_BASE_URL = getApiBaseUrl();

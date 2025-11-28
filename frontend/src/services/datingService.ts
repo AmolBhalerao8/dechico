@@ -3,7 +3,7 @@
  * Handles all dating-related API calls
  */
 
-const API_URL = 'http://localhost:3001/api';
+import { API_BASE_URL } from './apiClient';
 
 export interface DatingProfile {
   userId: string;
@@ -40,8 +40,8 @@ export interface SwipeResult {
  */
 export const getSwipeableProfiles = async (userId: string): Promise<DatingProfile[]> => {
   try {
-    console.log('🌐 Fetching profiles from:', `${API_URL}/dating/profiles?userId=${userId}`);
-    const response = await fetch(`${API_URL}/dating/profiles?userId=${userId}`);
+    console.log('🌐 Fetching profiles from:', `${API_BASE_URL}/api/dating/profiles?userId=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/api/dating/profiles?userId=${userId}`);
     
     console.log('📡 Response status:', response.status, response.statusText);
     
@@ -73,7 +73,7 @@ export const recordSwipe = async (
   direction: 'left' | 'right'
 ): Promise<SwipeResult> => {
   try {
-    const response = await fetch(`${API_URL}/dating/swipe`, {
+    const response = await fetch(`${API_BASE_URL}/api/dating/swipe`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -107,7 +107,7 @@ export const recordSwipe = async (
  */
 export const getUserMatches = async (userId: string): Promise<Match[]> => {
   try {
-    const response = await fetch(`${API_URL}/dating/matches?userId=${userId}`);
+    const response = await fetch(`${API_BASE_URL}/api/dating/matches?userId=${userId}`);
     
     if (!response.ok) {
       throw new Error('Failed to fetch matches');

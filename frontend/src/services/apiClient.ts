@@ -1,23 +1,18 @@
-const LOCAL_API_BASE_URL = 'http://localhost:3001';
+const DEFAULT_API_BASE_URL = 'http://localhost:3001';
+const CLOUD_RUN_BASE_URL = 'https://dechico-backend-772774227494.us-central1.run.app';
 
-const resolveApiBaseUrl = () => {
-  const envValue = import.meta?.env?.VITE_API_BASE_URL?.trim();
-  if (envValue) {
-    return envValue;
+const getApiBaseUrl = () => {
+  const fromEnv = import.meta?.env?.VITE_API_BASE_URL;
+  if (fromEnv && fromEnv.trim().length > 0) {
+    return fromEnv.trim();
   }
 
-  const message =
-    'VITE_API_BASE_URL is not defined. Configure it in your environment variables (Vercel dashboard for production, `.env` locally).';
-
-  if (import.meta?.env?.DEV) {
-    console.warn(`${message} Falling back to ${LOCAL_API_BASE_URL} for local development.`);
-    return LOCAL_API_BASE_URL;
+  if (typeof window !== 'undefined' && window.location.hostname !== 'localhost') {
+    return CLOUD_RUN_BASE_URL;
   }
 
-  throw new Error(message);
+  return DEFAULT_API_BASE_URL;
 };
-
-export const API_BASE_URL = resolveApiBaseUrl();
 
 export const API_BASE_URL = getApiBaseUrl();
 

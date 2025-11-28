@@ -10,8 +10,7 @@ import {
   signInWithEmailAndPassword,
 } from 'firebase/auth';
 import { getFirebaseAuth } from '../config/firebase';
-
-const API_URL = 'http://localhost:3001/api';
+import { API_BASE_URL } from '../services/apiClient';
 
 type AuthMode = 'login' | 'signup' | null;
 
@@ -69,7 +68,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
     setError('');
 
     try {
-      const response = await fetch(`${API_URL}/auth/send-verification-code`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/send-verification-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email }),
@@ -101,7 +100,7 @@ export const AuthModal = ({ mode, onClose, onSuccess }: AuthModalProps) => {
 
     try {
       console.log('🔍 Verifying code for email:', email);
-      const response = await fetch(`${API_URL}/auth/verify-code`, {
+      const response = await fetch(`${API_BASE_URL}/api/auth/verify-code`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ email, code: verificationCode }),

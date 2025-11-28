@@ -1,10 +1,14 @@
-const DEFAULT_API_BASE_URL = 'http://localhost:3001';
+const LOCAL_API_BASE_URL = 'http://localhost:3001';
+const PROD_FALLBACK_API_BASE_URL = 'https://dechico-backend-772774227494.us-central1.run.app';
 
 const getApiBaseUrl = () => {
   if (import.meta?.env?.VITE_API_BASE_URL) {
     return import.meta.env.VITE_API_BASE_URL;
   }
-  return DEFAULT_API_BASE_URL;
+  if (import.meta?.env?.DEV) {
+    return LOCAL_API_BASE_URL;
+  }
+  return PROD_FALLBACK_API_BASE_URL;
 };
 
 export const API_BASE_URL = getApiBaseUrl();

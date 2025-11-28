@@ -421,28 +421,28 @@ type LandingPageProps = {
 
 const LandingPage = ({ onShowAuth }: LandingPageProps) => {
   return (
-    <div className="min-h-screen bg-dchico-bg text-dchico-text flex flex-col">
-      <header className="flex items-center justify-between px-6 sm:px-10 py-4 border-b border-dchico-border bg-white/70 backdrop-blur">
-        <DeChicoWordmark className="text-2xl" />
-        <div className="flex items-center gap-3 text-sm">
+    <div className="min-h-screen h-screen bg-dchico-bg text-dchico-text flex flex-col overflow-hidden">
+      <header className="flex items-center justify-between px-4 sm:px-6 lg:px-10 py-3 sm:py-4 border-b border-dchico-border bg-white/70 backdrop-blur flex-shrink-0 z-10">
+        <DeChicoWordmark className="text-xl sm:text-2xl" />
+        <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => onShowAuth('login')}
-            className="px-4 py-1.5 rounded-full border border-dchico-border hover:border-dchico-accent transition"
+            className="px-3 py-1.5 sm:px-4 text-xs sm:text-sm rounded-full border border-dchico-border hover:border-dchico-accent transition whitespace-nowrap"
           >
             Log in
           </button>
           <button
             onClick={() => onShowAuth('signup')}
-            className="px-5 py-1.5 rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary text-white font-semibold shadow-glow hover:brightness-110 transition"
+            className="px-4 py-1.5 sm:px-5 text-xs sm:text-sm rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary text-white font-semibold shadow-glow hover:brightness-110 transition whitespace-nowrap"
           >
             Sign up
           </button>
         </div>
       </header>
 
-      <main className="flex-1">
+      <main className="flex-1 min-h-0 relative w-full overflow-hidden">
         <video
-          className="w-full h-full object-cover"
+          className="absolute inset-0 w-full h-full object-cover object-center"
           src="/landingpage.mp4"
           autoPlay
           loop

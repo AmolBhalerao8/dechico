@@ -1,30 +1,23 @@
 const LOCAL_API_BASE_URL = 'http://localhost:3001';
-const PROD_FALLBACK_API_BASE_URL = 'https://dechico-backend-772774227494.us-central1.run.app';
 
-const isBrowser = typeof window !== 'undefined';
-const isLocalHost = () => {
-  if (!isBrowser) return false;
-  const hostname = window.location.hostname?.toLowerCase() ?? '';
-  return hostname === 'localhost' || hostname === '127.0.0.1';
-};
-
-const getRuntimeDefaultBaseUrl = () => {
-  if (!isBrowser) {
-    return PROD_FALLBACK_API_BASE_URL;
-  }
-  return isLocalHost() ? LOCAL_API_BASE_URL : PROD_FALLBACK_API_BASE_URL;
-};
-
-const getApiBaseUrl = () => {
+const resolveApiBaseUrl = () => {
   const envValue = import.meta?.env?.VITE_API_BASE_URL?.trim();
   if (envValue) {
     return envValue;
   }
-  if (import.meta?.env?.DEV && isLocalHost()) {
+
+  const message =
+    'VITE_API_BASE_URL is not defined. Configure it in your environment variables (Vercel dashboard for production, `.env` locally).';
+
+  if (import.meta?.env?.DEV) {
+    console.warn(`${message} Falling back to ${LOCAL_API_BASE_URL} for local development.`);
     return LOCAL_API_BASE_URL;
   }
-  return getRuntimeDefaultBaseUrl();
+
+  throw new Error(message);
 };
+
+export const API_BASE_URL = resolveApiBaseUrl();
 
 export const API_BASE_URL = getApiBaseUrl();
 

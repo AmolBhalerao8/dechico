@@ -422,7 +422,7 @@ type LandingPageProps = {
 const LandingPage = ({ onShowAuth }: LandingPageProps) => {
   return (
     <div className="min-h-screen h-screen bg-dchico-bg text-dchico-text flex flex-col overflow-hidden">
-      <header className="flex items-center justify-between px-4 sm:px-6 lg:px-10 py-3 sm:py-4 border-b border-dchico-border bg-white/70 backdrop-blur flex-shrink-0 z-10">
+      <header className="flex items-center justify-between px-4 sm:px-6 lg:px-10 pt-6 pb-3 sm:pt-8 sm:pb-4 border-b border-dchico-border bg-white/70 backdrop-blur flex-shrink-0 z-10">
         <DeChicoWordmark className="text-xl sm:text-2xl" />
         <div className="flex items-center gap-2 sm:gap-3">
           <button
@@ -442,7 +442,7 @@ const LandingPage = ({ onShowAuth }: LandingPageProps) => {
 
       <main className="flex-1 min-h-0 relative w-full overflow-hidden">
         <video
-          className="absolute inset-0 w-full h-full object-cover object-center"
+          className="absolute inset-0 w-full h-full object-cover object-top"
           src="/landingpage.mp4"
           autoPlay
           loop

@@ -422,18 +422,18 @@ type LandingPageProps = {
 const LandingPage = ({ onShowAuth }: LandingPageProps) => {
   return (
     <div className="min-h-screen h-screen bg-dchico-bg text-dchico-text flex flex-col overflow-hidden">
-      <header className="flex items-center justify-between px-4 sm:px-6 lg:px-10 pt-6 pb-3 sm:pt-8 sm:pb-4 border-b border-dchico-border bg-white/70 backdrop-blur flex-shrink-0 z-10">
-        <DeChicoWordmark className="text-xl sm:text-2xl" />
+      <header className="flex items-center justify-between px-6 sm:px-8 lg:px-12 pt-8 pb-4 sm:pt-10 sm:pb-5 border-b border-dchico-border bg-white/80 backdrop-blur-md shadow-lg flex-shrink-0 z-10 transition-all duration-300">
+        <DeChicoWordmark className="text-2xl sm:text-3xl lg:text-4xl" />
         <div className="flex items-center gap-2 sm:gap-3">
           <button
             onClick={() => onShowAuth('login')}
-            className="px-3 py-1.5 sm:px-4 text-xs sm:text-sm rounded-full border border-dchico-border hover:border-dchico-accent transition whitespace-nowrap"
+            className="px-6 py-2.5 sm:px-8 sm:py-3 text-sm sm:text-base lg:text-lg rounded-full border-2 border-dchico-border hover:border-dchico-accent hover:bg-dchico-accent/5 transition-all duration-300 whitespace-nowrap font-semibold hover:scale-110 active:scale-95 shadow-md hover:shadow-lg"
           >
             Log in
           </button>
           <button
             onClick={() => onShowAuth('signup')}
-            className="px-4 py-1.5 sm:px-5 text-xs sm:text-sm rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary text-white font-semibold shadow-glow hover:brightness-110 transition whitespace-nowrap"
+            className="px-8 py-2.5 sm:px-10 sm:py-3 text-sm sm:text-base lg:text-lg rounded-full bg-gradient-to-r from-dchico-accent to-dchico-accent-secondary text-white font-bold shadow-xl shadow-dchico-accent/40 hover:shadow-2xl hover:shadow-dchico-accent/50 hover:scale-110 active:scale-95 transition-all duration-300 whitespace-nowrap animate-pulse-slow"
           >
             Sign up
           </button>
@@ -441,8 +441,9 @@ const LandingPage = ({ onShowAuth }: LandingPageProps) => {
       </header>
 
       <main className="flex-1 min-h-0 relative w-full overflow-hidden">
+        <div className="absolute inset-0 bg-gradient-to-b from-transparent via-transparent to-black/20 z-10 pointer-events-none" />
         <video
-          className="absolute inset-0 w-full h-full object-cover object-top"
+          className="absolute inset-0 w-full h-full object-cover object-top transition-transform duration-700 hover:scale-105"
           src="/landingpage.mp4"
           autoPlay
           loop
@@ -465,11 +466,11 @@ type SidebarProps = {
 }
 
 const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow, onLogout }: SidebarProps) => (
-  <aside className="hidden lg:flex flex-col w-64 border-r border-dchico-border bg-white/80 backdrop-blur">
-    <div className="px-5 py-5 border-b border-dchico-border flex items-center">
-      <DeChicoWordmark className="text-lg" />
+  <aside className="hidden lg:flex flex-col w-72 border-r border-dchico-border bg-white/90 backdrop-blur-md shadow-2xl transition-all duration-300">
+    <div className="h-16 px-6 border-b border-dchico-border flex items-center justify-center bg-gradient-to-r from-white to-dchico-bg/30">
+      <DeChicoWordmark className="text-2xl" />
     </div>
-    <nav className="flex-1 px-3 py-4 space-y-2 text-sm">
+    <nav className="flex-1 px-4 py-6 space-y-3 text-base">
       {[
         { label: 'Dating', tab: 'dating' },
         { label: 'Leaderboard', tab: 'leaderboard' },
@@ -478,10 +479,10 @@ const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow, onL
         <button
           key={item.tab}
           onClick={() => setCurrentTab(item.tab as Tab)}
-          className={`w-full rounded-xl px-4 py-2 text-left border transition ${
+          className={`w-full rounded-2xl px-5 py-4 text-left border transition-all duration-300 font-semibold text-lg ${
             currentTab === item.tab
-              ? 'border-dchico-accent bg-dchico-accent/10 text-dchico-accent'
-              : 'border-transparent text-dchico-muted hover:bg-dchico-panel'
+              ? 'border-dchico-accent bg-gradient-to-r from-dchico-accent/15 to-dchico-accent/5 text-dchico-accent shadow-lg transform scale-105'
+              : 'border-transparent text-dchico-muted hover:bg-dchico-panel hover:border-dchico-border hover:scale-105 hover:shadow-md'
           } ${showProfileArrow && item.tab === 'profile' ? 'ring-2 ring-dchico-accent shadow-glow animate-pulse' : ''}`}
         >
           {item.label}
@@ -498,21 +499,21 @@ const Sidebar = ({ currentTab, setCurrentTab, displayName, showProfileArrow, onL
           </svg>
         </div>
       )}
-      <div className="h-10 w-10 rounded-full bg-dchico-panel flex items-center justify-center text-sm font-semibold text-dchico-accent">
+      <div className="h-14 w-14 rounded-full bg-gradient-to-br from-dchico-accent to-dchico-accent-secondary flex items-center justify-center text-xl font-bold text-white shadow-lg transition-transform duration-300 hover:scale-110 ring-2 ring-white">
         {displayName.charAt(0).toUpperCase()}
       </div>
       <div className="flex-1 min-w-0">
         <p className="text-sm font-medium truncate">{displayName}</p>
         <div className="flex gap-2">
           <button
-            className="text-[12px] text-dchico-muted hover:text-dchico-accent"
+            className="text-[12px] text-dchico-muted hover:text-dchico-accent transition-colors duration-200 font-medium"
             onClick={() => setCurrentTab('profile')}
           >
             View profile
           </button>
           <span className="text-[12px] text-dchico-muted">•</span>
           <button
-            className="text-[12px] text-dchico-muted hover:text-red-600"
+            className="text-[12px] text-dchico-muted hover:text-red-600 transition-colors duration-200 font-medium"
             onClick={onLogout}
           >
             Logout
@@ -530,8 +531,8 @@ type MobileNavProps = {
 }
 
 const MobileNav = ({ currentTab, setCurrentTab, showProfileArrow }: MobileNavProps) => (
-  <nav className="lg:hidden fixed bottom-0 inset-x-0 border-t border-dchico-border bg-white/90 backdrop-blur">
-    <div className="flex justify-around py-2 text-xs">
+  <nav className="lg:hidden fixed bottom-0 inset-x-0 border-t-2 border-dchico-border bg-white/95 backdrop-blur-md shadow-2xl z-50">
+    <div className="flex justify-around py-4 text-sm safe-area-inset-bottom">
       {[
         { label: 'Dating', tab: 'dating' },
         { label: 'Board', tab: 'leaderboard' },
@@ -541,8 +542,8 @@ const MobileNav = ({ currentTab, setCurrentTab, showProfileArrow }: MobileNavPro
         <button
           key={item.tab}
           onClick={() => setCurrentTab(item.tab as Tab)}
-          className={`relative flex flex-col items-center gap-0.5 ${
-            currentTab === item.tab ? 'text-dchico-accent' : 'text-dchico-muted'
+          className={`relative flex flex-col items-center gap-1.5 px-5 py-2 rounded-2xl transition-all duration-300 min-w-[70px] ${
+            currentTab === item.tab ? 'text-dchico-accent scale-110 font-bold bg-dchico-accent/5' : 'text-dchico-muted hover:text-dchico-accent/70 hover:scale-105 active:scale-95'
           } ${showProfileArrow && item.tab === 'profile' ? 'animate-pulse text-dchico-accent' : ''}`}
         >
           {showProfileArrow && item.tab === 'profile' && (
@@ -560,8 +561,13 @@ const MobileNav = ({ currentTab, setCurrentTab, showProfileArrow }: MobileNavPro
               />
             </div>
           )}
-          <span>●</span>
-          <span>{item.label}</span>
+          <span className={`text-xl transition-all duration-300 ${
+            currentTab === item.tab ? 'scale-150' : ''
+          }`}>●</span>
+          <span className="font-semibold text-xs">{item.label}</span>
+          {currentTab === item.tab && (
+            <div className="absolute -bottom-2 left-1/2 transform -translate-x-1/2 w-8 h-1 bg-dchico-accent rounded-full" />
+          )}
         </button>
       ))}
     </div>
@@ -591,7 +597,7 @@ const TopBar = ({ currentTab, displayName }: TopBarProps) => {
   }
 
   return (
-    <header className="h-16 border-b border-dchico-border bg-white/80 backdrop-blur flex items-center justify-between px-4 lg:px-8 sticky top-0 z-10">
+    <header className="h-16 border-b border-dchico-border bg-white/80 backdrop-blur-md flex items-center justify-between px-4 lg:px-8 sticky top-0 z-10 shadow-sm">
       <div>
         <h1 className="text-base font-semibold">{titleMap[currentTab]}</h1>
         <p className="text-xs text-dchico-muted">{subtitleMap[currentTab]}</p>
